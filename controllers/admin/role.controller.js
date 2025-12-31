@@ -1,5 +1,5 @@
 // controllers/role.controller.js
-const roleRepo = require("../../models/Role/role.repo");
+const roleRepo = require("../../models/role/role.repo");
 const adminRepo = require("../../models/admin/admin.repo");
 const { BadRequestException } = require("../../middlewares/errorHandler/exceptions");
 
