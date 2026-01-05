@@ -1,26 +1,16 @@
 // routes/salla/auth.route.js
 const { Router } = require("express");
-const {passport} = require("../../utils/passport.js");
 const router = Router();
+const ctrl = require("../../salla/controllers/sallaAuth.controller");
+const errorHandler = require("../../middlewares/errorHandler");
+const { SallaTokenMiddleWare } = require("../../salla/middleware/sallaToken.middleware");
 
-// Step 1 – redirect to Salla
-router.get(
-  "/",
-  passport.authenticate("salla", {
-    scope: ["offline_access"], // ok for refresh token
-  })
-);
+router.get("/", errorHandler(ctrl.startAuth));
+router.get("/callback", errorHandler(ctrl.callback));
+router.get("/status", errorHandler(ctrl.status));
+router.post("/refresh/:storeId", errorHandler(ctrl.refresh));
+router.post("/disconnect/:storeId", errorHandler(ctrl.disconnect));
 
-// Step 2 – callback from Salla
-router.get(
-  "/callback",
-  passport.authenticate("salla", { session: false }),
-  (req, res) => {
-    // req.user now contains store_id, access_token, refresh_token
-    console.log("Connected store:", req.user);
-    res.send("Salla store connected successfully!");
-  }
-);
-
+router.get("/me/:storeId", SallaTokenMiddleWare, errorHandler(ctrl.me));
 
 module.exports = router;

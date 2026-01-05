@@ -1,6 +1,6 @@
 // routes/index.route.js
 const express = require("express");
-const webhookRoutes = require("./webhook/index.route");
+// const webhookRoutes = require("./webhook/index.route");
 const adminRoutes = require("./admin/index.route");
 const clientRoutes = require("./client/index.route");
 const sallaRoutes = require("./salla/index.route");
@@ -20,11 +20,11 @@ router.get("/", errorHandler(async (req, res) => {
 // -------------------------
 router.use("/salla", sallaRoutes);
 
-router.use(
-  "/webhook", 
-  express.raw({ type: "application/json" }), // override JSON parsing
-  webhookRoutes
-);
+// router.use(
+//   "/webhook", 
+//   express.raw({ type: "application/json" }), // override JSON parsing
+//   webhookRoutes
+// );
 
 // -------------------------
 // Normal API routes (JSON parsing applies)
