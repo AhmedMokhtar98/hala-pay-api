@@ -62,17 +62,27 @@ exports.register = async (payload = {}) => {
   const phoneNumber = String(payload.phoneNumber || "").trim();
   const password = String(payload.password || "").trim();
   const otp = String(payload.otp || "").trim();
+
+  // ✅ normalize fcm token once
   const fcmToken = String(payload.fcmToken || "").trim();
+  const fcmTokens = fcmToken ? [fcmToken] : [];
 
-  await verifyLoginOTP(phoneCode, phoneNumber, otp); 
+  // ✅ OTP verify
+  await verifyLoginOTP(phoneCode, phoneNumber, otp);
 
-
+  // ✅ email uniqueness
   const exists = await Client.findOne({ email }).select({ _id: 1 }).lean();
-  if (exists)  { throw new ConflictException("errors.email_used");};
+  if (exists) {
+    throw new ConflictException("errors.email_used");
+  }
 
+  // ✅ phone uniqueness
   const existsPhone = await Client.findOne({ phoneCode, phoneNumber }).select({ _id: 1 }).lean();
-  if (existsPhone)  { throw new ConflictException("errors.phone_used");};
+  if (existsPhone) {
+    throw new ConflictException("errors.phone_used");
+  }
 
+  // ✅ create client (no extra save needed for fcm)
   const result = await Client.create({
     firstName,
     lastName,
@@ -82,42 +92,44 @@ exports.register = async (payload = {}) => {
     password, // hashed by pre('save')
     birthDate: payload.birthDate ? new Date(payload.birthDate) : undefined,
     os: String(payload.os || ""),
-    agreeToTerms:  true ,
+    agreeToTerms: true,
     isPhoneVerified: true, // since OTP verified
-    fcmToken: payload.fcmToken ? [String(payload.fcmToken)] : [],
+    fcmToken: fcmTokens, // ✅ stored as array
   });
-      // Optional: Update FCM token if provided
-      if (fcmToken && !result.fcmToken.includes(fcmToken)) {
-          result.fcmToken.push(fcmToken);
-          await result.save();
-      }
 
-     
+  // ✅ token (keep it lean; don't put fcmToken in JWT unless you really need it)
+  const token = jwtHelper.generateToken({
+    _id: result._id,
+    firstName: result.firstName,
+    lastName: result.lastName,
+    email: result.email,
+    isPhoneVerified: result.isPhoneVerified,
+    isEmailVerified: result.isEmailVerified,
+    isActive: result.isActive,
+    phoneCode: result.phoneCode,
+    phoneNumber: result.phoneNumber,
+    birthDate: result.birthDate,
+    role: "client",
+  });
 
-    const token = jwtHelper.generateToken({
-      _id: result._id,
-      firstName: result.firstName,
-      lastName: result.lastName,
-      email: result.email,
-      isPhoneVerified: result.isPhoneVerified,
-      isEmailVerified: result.isEmailVerified,
-      isActive: result.isActive,
-      phoneCode: result.phoneCode,
-      phoneNumber: result.phoneNumber,
-      birthDate: result.birthDate,
-      role: "client",
-    });
-
+  // ✅ fetch safe client data
   const client = await Client.findById(result._id).select(SAFE_SELECT).lean();
 
+  // ✅ RETURN fcmToken in response (even if SAFE_SELECT doesn't include it)
   return {
     success: true,
     code: 201,
     message: "success.registered_successfully",
-    result: { client },
+    result: {
+      client: {
+        ...client,
+        fcmToken: result.fcmToken, // ✅ guaranteed returned
+      },
+    },
     token,
   };
 };
+
 
 exports.sendOTP = async (phoneCode, phoneNumber) => {
   phoneCode = String(phoneCode || "").trim();
