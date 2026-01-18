@@ -241,8 +241,7 @@ module.exports = {
         "string.max": "errors.validOtp",
         "any.required": "errors.requiredOtp",
       }),
-    }).options(joiOptions),
-    fcmToken: Joi
+      fcmToken: Joi
           .string()
           .required()
           .messages({
@@ -250,6 +249,8 @@ module.exports = {
             "any.required": "errors.requiredFCMToken",
             "string.empty": "errors.emptyFCMToken",
     }),
+    }).options(joiOptions),
+    
   },
 
   // ✅ Update

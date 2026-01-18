@@ -130,7 +130,6 @@ exports.register = async (payload = {}) => {
   };
 };
 
-
 exports.sendOTP = async (phoneCode, phoneNumber) => {
   phoneCode = String(phoneCode || "").trim();
   phoneNumber = String(phoneNumber || "").trim();
