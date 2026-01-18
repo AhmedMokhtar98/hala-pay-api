@@ -62,6 +62,7 @@ exports.register = async (payload = {}) => {
   const phoneNumber = String(payload.phoneNumber || "").trim();
   const password = String(payload.password || "").trim();
   const otp = String(payload.otp || "").trim();
+  const fcmToken = String(payload.fcmToken || "").trim();
 
   await verifyLoginOTP(phoneCode, phoneNumber, otp); 
 
@@ -85,6 +86,11 @@ exports.register = async (payload = {}) => {
     isPhoneVerified: true, // since OTP verified
     fcmToken: payload.fcmToken ? [String(payload.fcmToken)] : [],
   });
+      // Optional: Update FCM token if provided
+      if (fcmToken && !result.fcmToken.includes(fcmToken)) {
+          result.fcmToken.push(fcmToken);
+          await result.save();
+      }
 
      
 
