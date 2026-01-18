@@ -1,11 +1,12 @@
 const mongoose = require("mongoose");
 
-const SallaStoreTokenSchema = new mongoose.Schema(
+const storeSchema = new mongoose.Schema(
   {
+    businessName: { type: String, default: "" },
     // store identifier (from user info endpoint)
     storeId: { type: String, required: true, unique: true, index: true },
-
     // merchant/user info snapshot (optional but useful)
+    
     merchant: { type: Object, default: null },
 
     accessToken: { type: String, required: true },
@@ -16,8 +17,10 @@ const SallaStoreTokenSchema = new mongoose.Schema(
 
     // store absolute expiry time
     expiresAt: { type: Date, required: true },
+    logo: { type: String, default: "" },
+    isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("SallaStoreToken", SallaStoreTokenSchema);
+module.exports = mongoose.model("stores", storeSchema);

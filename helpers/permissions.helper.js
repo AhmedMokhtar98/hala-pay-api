@@ -32,6 +32,28 @@ const clientEndPoints = new Set([
 
   "PATCH /admin/clients/:id/password",
 ]);
+//  Store
+const storeEndPoints = new Set([
+  "POST /admin/stores",
+  "PUT /admin/stores/:storeId",
+  "PUT /admin/stores/logo",
+  "PUT /admin/stores/logo/remove",
+  "GET /admin/stores",
+  "GET /admin/stores/:storeId",
+  "GET /admin/stores/:storeId/products",
+  "GET /admin/stores/:storeId/orders",
+  "DELETE /admin/stores/:storeId",
+]);
+
+
+const categoriesEndPoints = new Set([
+  "POST /admin/categories",
+  "PUT /admin/categories",
+  "GET /admin/categories",
+  "GET /admin/categories/:categoryId",
+  "DELETE /admin/categories/:categoryId",
+  "PUT /admin/categories/image",
+]);
 
 // PERMISSIONS
 const permissionEndPoints = new Set([
@@ -43,5 +65,7 @@ permissions.set("admins", adminEndPoints);
 permissions.set("roles", roleEndPoints);
 permissions.set("clients", clientEndPoints);
 permissions.set("permissions", permissionEndPoints);
+permissions.set("stores", storeEndPoints);
+permissions.set("categories", categoriesEndPoints);
 
 module.exports = { permissions };

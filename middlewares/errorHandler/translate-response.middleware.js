@@ -12,14 +12,14 @@ module.exports = function translateResponse(req, res, next) {
       // 1) If message is top-level -> translate top-level
       if (shouldTranslate(body?.message)) {
         const key = body.message;
-        body.messageKey = key;
+        // body.messageKey = key;
         body.message = req.__(key);
       }
 
       // 2) If message is inside result -> translate inside result
       if (body?.result && typeof body.result === "object" && shouldTranslate(body.result?.message)) {
         const key = body.result.message;
-        body.result.messageKey = key;
+        // body.result.messageKey = key;
         body.result.message = req.__(key);
       }
     } catch (e) {

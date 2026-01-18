@@ -29,7 +29,8 @@ exports.update = async (req, res)=>{
 
 exports.remove = async (req, res)=>{
     const {id} = req.params;
-    const operationResultObject = await clientRepo.remove(id);
+    const permanent = req.body.permanent;
+    const operationResultObject = await clientRepo.remove(id, permanent);
     return res.status(operationResultObject.code).json(operationResultObject);
 }
 

@@ -1,7 +1,7 @@
 // routes/salla/index.route.js
 const express = require("express");
 const app = express();
-const sallaStoreRoutes = require("./sallaStore.routes");
+const sallaStoreRoutes = require("./sallaStore.route");
 const authRoutes = require("./auth.route");
 
 // Other routes...

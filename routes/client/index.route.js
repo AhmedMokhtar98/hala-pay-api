@@ -7,7 +7,7 @@ const emailRoutes = require("./email.route");
 const allowedUsers = ["client"]
 let checkToken = require("../../helpers/jwt.helper").verifyToken;
 
-app.use(authRoutes)
+app.use("/auth", authRoutes);
 app.use("/email", emailRoutes);
 app.use(checkToken(allowedUsers), clientRoutes);
 

@@ -2,7 +2,7 @@
 const CryptoJS = require("crypto-js");
 
 // ✅ Put this in env in real deployments
-const SECRET_KEY_ENCRYPTION = process.env.SECRET_KEY_ENCRYPTION || "HalaPay@2024#EncryptionKey!";
+const SECRET_KEY_ENCRYPTION = process.env.SECRET_KEY_ENCRYPTION || "YallaPay@2024#EncryptionKey!";
 const ENV = process.env.ENV || "dev";
 
 /**

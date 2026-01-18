@@ -1,4 +1,4 @@
-const SallaStoreToken = require("../models/SallaStoreToken.model");
+const SallaStoreTokenModel = require("../../models/store/store.model");
 const { refreshAccessToken } = require("../services/sallaOAuth.service");
 
 function isExpiringSoon(expiresAt, skewSeconds = 60) {
@@ -12,7 +12,7 @@ async function SallaTokenMiddleWare(req, res, next) {
     const storeId = String(req.params.storeId || req.query.storeId || "");
     if (!storeId) return res.status(400).json({ success: false, message: "storeId is required" });
 
-    const doc = await SallaStoreToken.findOne({ storeId });
+    const doc = await SallaStoreTokenModel.findOne({ storeId });
     if (!doc) return res.status(404).json({ success: false, message: "Store not connected" });
 
     if (isExpiringSoon(doc.expiresAt)) {

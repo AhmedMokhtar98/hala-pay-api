@@ -39,12 +39,49 @@
     "validJoinDate": "Join date must be a valid date",
     "invalid_or_expired_token": "Invalid or expired token",
     "access_denied": "Access denied",
-    "name_used": "Name is already used"
+    "name_used": "Name is already used",
+    "store_exists":"Store Name Exists Before !",
+    "invalid_email_or_password": "Invalid email or password",
+    "emptyPhone": "Phone number cannot be empty.",
+    "phoneTooShort": "Phone number is too short.",
+    "phoneTooLong": "Phone number is too long.",
+    "passwordTooShort": "Password must be at least 6 characters.",
+    "validOS": "Please enter a valid operating system.",
+    "validBirthDate": "Please enter a valid birth date.",
+    "noFieldsToUpdate": "Please provide at least one field to update.",
+    "requiredPhoneCode": "Country code is required.",
+    "emptyPhoneCode": "Country code cannot be empty.",
+    "validPhoneCode": "Please enter a valid country code (example: +20).",
+    "phoneCodeTooShort": "Country code is too short.",
+    "phoneCodeTooLong": "Country code is too long.",
+
+    "requiredPhoneNumber": "Phone number is required.",
+    "emptyPhoneNumber": "Phone number cannot be empty.",
+    "validPhoneNumber": "Please enter a valid phone number (digits only).",
+    "phoneNumberTooShort": "Phone number is too short.",
+    "phoneNumberTooLong": "Phone number is too long.",
+
+    "phoneBothRequired": "Phone code and phone number must be provided together.",
+    "account_inactive": "Account is inactive. Please contact support.",
+    "account_phoneNotVerified": "Phone number is not verified. Please verify your phone number.",
+    "account_emailNotVerified": "Email is not verified. Please verify your email.",
+    "invalid_login_type": "Invalid login type. Must be 'phone' or 'email'.",
+    "otp_expired": "OTP has expired. Please request a new one.",
+    "otp_invalid": "Invalid OTP. Please try again.",
+    "invalid_phone_or_otp": "Invalid phone number or OTP.",
+    "validFCMToken": "FCM Token must be a string.",
+    "requiredFCMToken": "FCM Token is required.",
+    "emptyFCMToken": "FCM Token cannot be empty."
   },
   "success": {
     "record_updated": "Record updated successfully",
     "record_created": "Record created successfully",
     "record_deleted": "Record deleted successfully",
-    "operation_successful": "Operation completed successfully"
+    "operation_successful": "Operation completed successfully",
+    "logged_in": "Logged in successfully",
+    "otp_verified": "OTP verified successfully",
+    "otp_sent": "OTP sent successfully",
+    "otp_sent_and_valid_5_minutes": "OTP sent successfully and is valid for 5 minutes",
+    "registered_successfully": "Registered successfully"
   }
 }

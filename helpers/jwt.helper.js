@@ -100,3 +100,79 @@ exports.verifyToken = (roles = []) => {
     }
   };
 };
+
+
+
+exports.refreshAccessToken = async (currentRefreshToken) => {
+  try {
+    console.log("Attempting to verify refresh token...");
+
+    const decoded = jwt.verify(currentRefreshToken, process.env.REFRESH_TOKEN_SECRET);
+    console.log("Decoded refresh token:", decoded);
+
+    if (decoded.type !== "refresh") {
+      throw new UnauthorizedException("Expected a refresh token.");
+    }
+
+    const refreshTokenId = decoded.tid;
+
+    if ( !refreshTokenId ) {
+      throw new UnauthorizedException("Refresh token is missing required information.");
+    }
+
+    const cleanDecoded = stripTokenMeta(decoded);
+    let updatedPayload = { ...cleanDecoded };
+
+    const { accessToken, refreshToken } = await exports.generateToken(updatedPayload);
+
+    return {
+      success: true,
+      code: 200,
+      message: "Token refreshed successfully.",
+      result: updatedPayload,
+      token: accessToken,
+      refreshToken
+    };
+  } catch (err) {
+    console.error("Refresh Token Error:", err);
+    throw new UnauthorizedException("Invalid or expired refresh token.");
+  }
+};
+
+
+
+exports.generateDummyStoreToken = async (payloadObject) => {
+  try {
+    const accessExpiry =  "1m";
+    const refreshExpiry = "1y";
+
+    const cleanPayload = stripTokenMeta(payloadObject);
+
+    const accessToken = jwt.sign(
+      {
+        ...cleanPayload,
+        tid: uuidv4(),
+        type: "access",
+      },
+      process.env.ACCESS_DUMMY_TOKEN_SECRET,
+      { expiresIn: accessExpiry }
+    );
+
+    const refreshToken = jwt.sign(
+      {
+        ...cleanPayload,
+        tid: uuidv4(),
+        type: "refresh",
+      },
+      process.env.REFRESH_DUMMY_TOKEN_SECRET,
+      { expiresIn: refreshExpiry }
+    );
+
+    return { accessToken, refreshToken, refreshExpiry};
+  } catch (err) {
+    console.error("Token generation failed:", err);
+    throw new InternalServerErrorException(
+      "errors.token_generation_failed"
+    );
+  }
+};

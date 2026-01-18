@@ -39,12 +39,60 @@
     "validJoinDate": "تاريخ الانضمام يجب أن يكون تاريخ صالح",
     "invalid_or_expired_token": "رمز غير صالح أو منتهي الصلاحية",
     "access_denied": "تم رفض الوصول",
-    "name_used": "الاسم مستخدم بالفعل"
+    "name_used": "الاسم مستخدم بالفعل",
+    "store_exists":"اسم المتجر موجود من قبل",
+    "invalid_email_or_password": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+
+
+
+    "emptyPhone": "رقم الموبايل مينفعش يكون فاضي.",
+    "phoneTooShort": "رقم الموبايل قصير جدًا.",
+    "phoneTooLong": "رقم الموبايل طويل جدًا.",
+
+    "passwordTooShort": "كلمة المرور لازم تكون 6 أحرف على الأقل.",
+
+
+    "validOS": "من فضلك اكتب نظام تشغيل صحيح.",
+
+    "validBirthDate": "من فضلك اكتب تاريخ ميلاد صحيح.",
+
+
+    "noFieldsToUpdate": "لازم تبعت على الأقل حقل واحد للتعديل.",
+
+
+    "requiredPhoneCode": "كود الدولة مطلوب.",
+    "emptyPhoneCode": "كود الدولة مينفعش يكون فاضي.",
+    "validPhoneCode": "من فضلك اكتب كود دولة صحيح (مثال: +20).",
+    "phoneCodeTooShort": "كود الدولة قصير جدًا.",
+    "phoneCodeTooLong": "كود الدولة طويل جدًا.",
+
+    "requiredPhoneNumber": "رقم الموبايل مطلوب.",
+    "emptyPhoneNumber": "رقم الموبايل مينفعش يكون فاضي.",
+    "validPhoneNumber": "من فضلك اكتب رقم موبايل صحيح (أرقام فقط).",
+    "phoneNumberTooShort": "رقم الموبايل قصير جدًا.",
+    "phoneNumberTooLong": "رقم الموبايل طويل جدًا.",
+
+    "phoneBothRequired": "لازم تبعت كود الدولة ورقم الموبايل مع بعض.",
+    "account_inactive": "الحساب غير نشط. من فضلك تواصل مع الدعم.",
+    "account_phoneNotVerified": "رقم الموبايل غير موثق. من فضلك قم بتوثيق رقم الموبايل.",
+    "account_emailNotVerified": "البريد الإلكتروني غير موثق. من فضلك قم بتوثيق البريد الإلكتروني.",
+    "invalid_login_type": "نوع تسجيل الدخول غير صالح. يجب أن يكون 'phone' أو 'email'.",
+    "otp_expired": "رمز التحقق (OTP) انتهت صلاحيته. من فضلك اطلب رمز جديد.",
+    "otp_invalid": "رمز التحقق (OTP) غير صالح. من فضلك حاول مرة أخرى.",
+    "invalid_phone_or_otp": "رقم الموبايل أو رمز التحقق (OTP) غير صالح.",
+    "validFCMToken": "رمز FCM يجب أن يكون نصاً.",
+    "requiredFCMToken": "رمز FCM مطلوب.",
+    "emptyFCMToken": "رمز FCM مينفعش يكون فاضي."
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",
     "record_created": "تم إنشاء السجل بنجاح",
     "record_deleted": "تم حذف السجل بنجاح",
-    "operation_successful": "تمت العملية بنجاح"
+    "operation_successful": "تمت العملية بنجاح",
+    "logged_in": "تم تسجيل الدخول بنجاح",
+    "otp_verified": "تم التحقق من رمز التحقق (OTP) بنجاح",
+    "otp_sent": "تم إرسال رمز التحقق (OTP) بنجاح",
+    "otp_sent_and_valid_5_minutes": "تم إرسال رمز التحقق (OTP) بنجاح وهو صالح لمدة 5 دقائق",
+    "registered_successfully": "تم التسجيل بنجاح"
   }
 }

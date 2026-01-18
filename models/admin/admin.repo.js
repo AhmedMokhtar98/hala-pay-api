@@ -43,21 +43,21 @@ async function assertUserNameUnique(userName, ignoreId = null) {
 
 exports.login = async (userData) => {
   const { userName, password } = userData;
-
+  console.log("Attempting login for userName:", userName); // Debug log
+  console.log("password provided:", password ); // Debug log
   const normalizedUserName = String(userName || "").toLowerCase().trim();
   if (!normalizedUserName || !password) {
     throw new UnauthorizedException("errors.invalid_credentials");
   }
+  console.log("Searching for admin with userName:", normalizedUserName);
 
   // لازم نجيب password عشان نقارن
   const admin = await adminModel
     .findOne({ userName: normalizedUserName })
     .populate({ path: "permission", select: "name permissions" })
     .lean();
-    console.log("Admin found during login:", admin); // Debug log
 
   if (!admin) throw new UnauthorizedException("errors.invalid_credentials");
-
   const passwordMatch = await bcrypt.compare(password, admin.password);
   if (!passwordMatch) throw new UnauthorizedException("errors.password_incorrect");
 
@@ -76,6 +76,14 @@ exports.login = async (userData) => {
 
   return { success: true, code: 200, result: { admin, token } };
 };
+
+exports.refreshToken = async (refreshToken) => {
+    if (!refreshToken) {
+        throw new UnauthorizedException("errors.refresh_token_required");
+    }
+      const result = await jwtHelper.refreshAccessToken(refreshToken);
+        return result;
+}
 
 // ============================
 // GET BY ID
