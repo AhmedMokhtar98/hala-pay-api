@@ -1,0 +1,42 @@
+name: Deploy Node.js App
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Start SSH agent and add private key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: SSH & deploy on remote server
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USERNAME }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -e
+
+            # Fix Git safe directory
+            git config --global --add safe.directory /var/www/hala-pay-api
+
+            cd /var/www/hala-pay-api
+
+            # Pull latest code
+            git fetch --all
+            git reset --hard origin/master
+
+            # Install dependencies
+            npm install --force
+
+            # Restart Node.js app via PM2 (zero downtime)
+            pm2 reload hala-pay-api || pm2 start index.js --name hala-pay-api
+
+            echo "✅ Deployment succeeded"
+          EOF
