@@ -11,32 +11,60 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Start SSH agent and add private key
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: SSH & deploy on remote server
+      - name: Deploy over SSH
+        env:
+          SSH_USER: ${{ secrets.SSH_USERNAME }}   # administrator
+          SSH_HOST: ${{ secrets.SERVER_IP }}
+          APP_DIR: /var/www/hala-pay-api
+          BRANCH: master
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USERNAME }}@${{ secrets.SERVER_IP }} << 'EOF'
+          set -e
+
+          # Add host to known_hosts (safer than StrictHostKeyChecking=no)
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+          ssh "$SSH_USER@$SSH_HOST" << EOF
             set -e
 
-            # Fix Git safe directory
-            git config --global --add safe.directory /var/www/hala-pay-api
+            APP_DIR="$APP_DIR"
+            BRANCH="$BRANCH"
 
-            cd /var/www/hala-pay-api
+            echo "➡️  Deploying to: \$APP_DIR (branch: \$BRANCH)"
 
-            # Pull latest code
+            # Try fixing permissions if sudo is available (won't fail if not)
+            if command -v sudo >/dev/null 2>&1; then
+              sudo -n true >/dev/null 2>&1 && sudo -n chown -R "$SSH_USER:$SSH_USER" "\$APP_DIR" || true
+            fi
+
+            # Git safe directory (needed sometimes on servers)
+            git config --global --add safe.directory "\$APP_DIR" || true
+
+            cd "\$APP_DIR"
+
+            # Ensure repo is clean and up to date
             git fetch --all
-            git reset --hard origin/master
+            git reset --hard "origin/\$BRANCH"
 
-            # Install dependencies
+            # Install deps
             npm install --force
 
-            # Restart Node.js app via PM2 (zero downtime)
-            pm2 reload hala-pay-api || pm2 start index.js --name hala-pay-api
+            # Restart with PM2
+            if command -v pm2 >/dev/null 2>&1; then
+              pm2 reload hala-pay-api || pm2 start index.js --name hala-pay-api
+              pm2 save || true
+            else
+              echo "❌ PM2 is not installed on the server."
+              exit 1
+            fi
 
             echo "✅ Deployment succeeded"
           EOF
