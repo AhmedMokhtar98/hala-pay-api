@@ -66,15 +66,16 @@ exports.register = async (payload = {}) => {
   // ✅ normalize fcm token once
   const fcmToken = String(payload.fcmToken || "").trim();
   const fcmTokens = fcmToken ? [fcmToken] : [];
-
-  // ✅ OTP verify
-  await verifyLoginOTP(phoneCode, phoneNumber, otp);
-
+  
   // ✅ email uniqueness
   const exists = await Client.findOne({ email }).select({ _id: 1 }).lean();
   if (exists) {
     throw new ConflictException("errors.email_used");
   }
+
+  // ✅ OTP verify
+  await verifyLoginOTP(phoneCode, phoneNumber, otp);
+
 
   // ✅ phone uniqueness
   const existsPhone = await Client.findOne({ phoneCode, phoneNumber }).select({ _id: 1 }).lean();
