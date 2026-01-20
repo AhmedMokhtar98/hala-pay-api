@@ -72,7 +72,13 @@
     "validFCMToken": "FCM Token must be a string.",
     "requiredFCMToken": "FCM Token is required.",
     "emptyFCMToken": "FCM Token cannot be empty.",
-    "email_not_found": "Email not found"
+    "email_not_found": "Email not found",
+    "requiredRefreshToken": "Refresh token is required.",
+    "emptyRefreshToken": "Refresh token cannot be empty.",
+    "validRefreshToken": "Refresh token must be a string.",
+    "invalid_or_expired_refresh_token": "Invalid or expired refresh token",
+    "expected_refresh_token": "Expected a refresh token.",
+    "missing_refresh_token_id": "Refresh token is missing required information."
   },
   "success": {
     "record_updated": "Record updated successfully",
@@ -84,6 +90,8 @@
     "otp_sent": "OTP sent successfully",
     "otp_sent_and_valid_5_minutes": "OTP sent successfully and is valid for 5 minutes",
     "registered_successfully": "Registered successfully",
-    "password_reset_otp_sent": "Password reset OTP sent successfully to your email"
+    "password_reset_otp_sent": "Password reset OTP sent successfully to your email",
+    "password_reset_successful": "Password has been reset successfully",
+    "token_refreshed": "Token refreshed successfully"
   }
 }

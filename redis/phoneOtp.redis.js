@@ -102,7 +102,7 @@ exports.verifyLoginOTP = async (phoneCode, phoneNumber, otp, keepOtp = false) =>
  * ✅ Send OTP to EMAIL + store in Redis with TTL
  * Intended for: password reset, email login, verification flows, etc.
  */
-exports.sendEmailOTP = async (email) => {
+exports.sendEmailOTP = async (email, lang) => {
   const em = String(email || "").trim().toLowerCase();
   if (!em) return { success: false, code: 400, message: "errors.requiredEmail" };
 
@@ -113,7 +113,7 @@ exports.sendEmailOTP = async (email) => {
 
   // Send via your nodemailer helper
   // NOTE: this function should send the OTP template we created earlier
-  const mailRes = await sendOTPPasswordResetEmailToClient({ email: em, otp });
+  const mailRes = await sendOTPPasswordResetEmailToClient({ email: em, otp , lang});
 
   if (!mailRes?.success) {
     // optional: delete OTP if sending fails to avoid "ghost" OTPs

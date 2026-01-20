@@ -4,7 +4,7 @@ const { ConflictException, UnauthorizedException, BadRequestException } = requir
 const bcrypt = require("bcrypt");
 const Client = require("./client.model");
 const jwtHelper = require("../../helpers/jwt.helper");
-const { sendOTP, verifyLoginOTP, sendEmailOTP } = require("../../redis/phoneOtp.redis");
+const { sendOTP, verifyLoginOTP, sendEmailOTP, verifyEmailOTP } = require("../../redis/phoneOtp.redis");
 const { sendOTPPasswordResetEmailToClient } = require("../../helpers/emailService.helper");
 
 
@@ -269,14 +269,39 @@ exports.login = async (payload = {}, type) => {
 };
 
 
-exports.forgotPassword = async (email) => {
+exports.forgotPassword = async (email, locale) => {
   email = normalizeEmail(email);
   const client = await Client.findOne({ email });
   if (!client)  { throw new ConflictException("errors.email_not_found");};
-  await sendEmailOTP(email);
+  await sendEmailOTP(email, locale);
   return {
     success: true,
     code: 200,
     message: "success.password_reset_otp_sent",
   };
+};
+
+
+exports.resetPassword = async (email, otp, newPassword) => {
+  email = normalizeEmail(email);
+  const client = await Client.findOne({ email });
+  if (!client)  { throw new ConflictException("errors.email_not_found");};
+
+  // Verify OTP
+  await verifyEmailOTP(email, otp);
+  // Update password
+  client.password = newPassword; // hashed by pre('save')
+  await client.save();
+  return {
+    success: true,
+    code: 200,
+    message: "success.password_reset_successful",
+  };
+}
+
+
+exports.refreshToken = async (refreshToken) => {
+    const result = await jwtHelper.refreshAccessToken(refreshToken);
+    return result
+  
 };

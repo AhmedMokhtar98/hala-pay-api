@@ -105,19 +105,17 @@ exports.verifyToken = (roles = []) => {
 
 exports.refreshAccessToken = async (currentRefreshToken) => {
   try {
-    console.log("Attempting to verify refresh token...");
 
     const decoded = jwt.verify(currentRefreshToken, process.env.REFRESH_TOKEN_SECRET);
-    console.log("Decoded refresh token:", decoded);
 
     if (decoded.type !== "refresh") {
-      throw new UnauthorizedException("Expected a refresh token.");
+      throw new UnauthorizedException("errors.expected_refresh_token");
     }
 
     const refreshTokenId = decoded.tid;
 
     if ( !refreshTokenId ) {
-      throw new UnauthorizedException("Refresh token is missing required information.");
+      throw new UnauthorizedException("errors.missing_refresh_token_id");
     }
 
     const cleanDecoded = stripTokenMeta(decoded);
@@ -128,14 +126,16 @@ exports.refreshAccessToken = async (currentRefreshToken) => {
     return {
       success: true,
       code: 200,
-      message: "Token refreshed successfully.",
+      message: "success.token_refreshed",
       result: updatedPayload,
-      token: accessToken,
-      refreshToken
+      token:{
+        accessToken,
+        refreshToken
+      }
     };
   } catch (err) {
     console.error("Refresh Token Error:", err);
-    throw new UnauthorizedException("Invalid or expired refresh token.");
+    throw new UnauthorizedException("errors.invalid_or_expired_refresh_token");
   }
 };
 

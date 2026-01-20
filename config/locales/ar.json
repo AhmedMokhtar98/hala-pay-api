@@ -83,7 +83,13 @@
     "validFCMToken": "رمز FCM يجب أن يكون نصاً.",
     "requiredFCMToken": "رمز FCM مطلوب.",
     "emptyFCMToken": "رمز FCM مينفعش يكون فاضي.",
-    "email_not_found": "البريد الإلكتروني غير موجود"
+    "email_not_found": "البريد الإلكتروني غير موجود",
+    "requiredRefreshToken": "رمز التحديث مطلوب.",
+    "emptyRefreshToken": "رمز التحديث مينفعش يكون فاضي.",
+    "validRefreshToken": "رمز التحديث يجب أن يكون نصاً.",
+    "invalid_or_expired_refresh_token": "رمز التحديث غير صالح أو منتهي الصلاحية",
+    "expected_refresh_token": "كان متوقع رمز تحديث.",
+    "missing_refresh_token_id": "رمز التحديث يفتقد لمعلومات مطلوبة."
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",
@@ -95,6 +101,8 @@
     "otp_sent": "تم إرسال رمز التحقق (OTP) بنجاح",
     "otp_sent_and_valid_5_minutes": "تم إرسال رمز التحقق (OTP) بنجاح وهو صالح لمدة 5 دقائق",
     "registered_successfully": "تم التسجيل بنجاح",
-    "password_reset_otp_sent": "تم إرسال رمز التحقق (OTP) لإعادة تعيين كلمة المرور بنجاح إلى بريدك الإلكتروني"
+    "password_reset_otp_sent": "تم إرسال رمز التحقق (OTP) لإعادة تعيين كلمة المرور بنجاح إلى بريدك الإلكتروني",
+    "password_reset_successful": "تم إعادة تعيين كلمة المرور بنجاح",
+    "token_refreshed": "تم تحديث الرمز بنجاح"
    }
 }

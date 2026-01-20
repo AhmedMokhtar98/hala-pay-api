@@ -7,6 +7,22 @@ const formatDate = (isoDate) => {
   return moment(isoDate).format('DD/MM/YYYY');
 };
 
+const joinUrl = (base, path) => {
+  const b = String(base || "").replace(/\/+$/, "");
+  const p = String(path || "").replace(/^\/+/, "");
+  return `${b}/${p}`;
+};
+
+// Small HTML safety
+const escapeHtml = (s) =>
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+
 exports.supportEmailTemplate = ({ name, company, email, phone, inquiryType, message }) => `
   <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
     <h2 style="text-align: center; color: #4A90E2;">New Support Request</h2>
@@ -41,108 +57,139 @@ exports.supportEmailTemplate = ({ name, company, email, phone, inquiryType, mess
   </div>
 `;
 
-// utils/emailTemplates.js (or wherever you keep templates)
-// utils/emailTemplates.js
 
 exports.otpPasswordResetEmailTemplate = ({
   otp,
   expiresInMinutes = 5,
   brandName = "YallaPay",
   supportEmail = "It@yallapayapp.com",
-  // ✅ Put your public logo URL here (must be an absolute URL for email clients)
-  // Example: https://api.yallapayapp.com/images/logo.png
-  logoUrl = process.env.APP_PUBLIC_URL + "/public/logo.png",
-  // ✅ Theme (black + light green)
+  logoUrl = joinUrl(process.env.APP_PUBLIC_URL, "public/logo.png"),
+
+  // ✅ pass "ar" for Arabic, otherwise "en"
+  lang = "en",
+
   theme = {
-    bg: "#050B07",          // near-black background
-    card: "#0B120D",        // dark card
-    border: "#163021",      // dark green border
-    text: "#E7F7EE",        // soft light text
-    muted: "#A7C8B6",       // muted green/gray
-    green: "#7CFFB2",       // light green accent
-    greenDark: "#18C77A",   // stronger green
+    pageBg: "#F6FFF9",
+    cardBg: "#FFFFFF",
+    border: "#E7F0EA",
+    text: "#0F172A",
+    muted: "#64748B",
+    green: "#18C77A",
+    green2: "#7CFFB2",
+    glow: "rgba(24,199,122,.22)",
+    logoBg: "#FFFFFF",
+    logoBorder: "#EEF2F7",
+    softPanel: "#F8FAFC",
   },
 }) => {
-  const code = String(otp || "").trim();
-  const safeOtp = code.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
+  const safeOtp = escapeHtml(String(otp || "").trim());
   const year = new Date().getFullYear();
 
+  const isAr = String(lang || "").toLowerCase().startsWith("ar");
+  const dir = isAr ? "rtl" : "ltr";
+  const align = isAr ? "right" : "left";
+
+  const t = isAr
+    ? {
+        badge: "رمز التحقق",
+        title: "رمز إعادة تعيين كلمة المرور",
+        desc: `استخدم رمز التحقق لمرة واحدة أدناه لإعادة تعيين كلمة المرور. ينتهي خلال`,
+        minutes: "دقائق",
+        codeLabel: "رمز التحقق",
+        dontShare: "لأمانك، لا تشارك هذا الرمز مع أي شخص.",
+        ignore:
+          "إذا لم تطلب إعادة تعيين كلمة المرور، يمكنك تجاهل هذه الرسالة بأمان. لن يتم تغيير كلمة المرور.",
+        help: "تحتاج مساعدة؟ تواصل معنا على",
+      }
+    : {
+        badge: "Security verification",
+        title: "Password reset code",
+        desc: `Use the one-time code below to reset your password. This code expires in`,
+        minutes: "minutes",
+        codeLabel: "One-time code",
+        dontShare: "For your security, don’t share this code with anyone.",
+        ignore:
+          "If you didn’t request a password reset, you can safely ignore this email. Your password will remain unchanged.",
+        help: "Need help?",
+      };
+
+  // For Arabic digits spacing sometimes looks odd — keep OTP in LTR block
+  const otpDirectionStyle = "direction:ltr;unicode-bidi:bidi-override;";
+
   return `
-  <div style="margin:0;padding:0;background:${theme.bg};">
-    <div style="max-width:560px;margin:0 auto;padding:28px 16px;">
+  <div style="margin:0;padding:0;background:${theme.pageBg};">
+    <div style="max-width:640px;margin:0 auto;padding:36px 16px;font-family:Arial,sans-serif;" dir="${dir}">
 
-      <!-- Header / Brand -->
-      <div style="text-align:center;margin-bottom:16px;font-family:Arial,sans-serif;">
-        <div style="display:inline-block;padding:10px 14px;border-radius:14px;background:rgba(124,255,178,.08);border:1px solid ${theme.border};">
-          <img
-            src="${logoUrl}"
-            alt="${brandName} logo"
-            width="120"
-            style="display:block;width:120px;max-width:100%;height:auto;object-fit:contain;"
-          />
+      <div style="max-width:560px;margin:0 auto;background:${theme.cardBg};border:1px solid ${theme.border};border-radius:22px;overflow:hidden;box-shadow:0 22px 70px rgba(15,23,42,.12);">
+
+        <!-- Header -->
+        <div style="padding:26px 22px 18px;text-align:center;background:linear-gradient(180deg, rgba(24,199,122,.14), rgba(124,255,178,.06));border-bottom:1px solid ${theme.border};">
+          <div style="display:inline-block;padding:10px 14px;border-radius:16px;background:${theme.logoBg};border:1px solid ${theme.logoBorder};box-shadow:0 10px 24px rgba(15,23,42,.10);">
+            <img
+              src="${logoUrl}"
+              alt="${escapeHtml(brandName)} logo"
+              width="120"
+              style="display:block;border:0;outline:none;text-decoration:none;width:120px;max-width:100%;height:auto;object-fit:contain;"
+            />
+          </div>
+
+          <div style="margin-top:10px;font-size:12px;color:${theme.muted};letter-spacing:.16em;text-transform:uppercase;">
+            ${t.badge}
+          </div>
+
+          <h1 style="margin:10px 0 0;font-size:20px;line-height:1.25;color:${theme.text};">
+            ${t.title}
+          </h1>
+
+          <p style="margin:10px auto 0;max-width:440px;font-size:14px;line-height:1.7;color:${theme.muted};">
+            ${t.desc}
+            <strong style="color:${theme.text};"> ${expiresInMinutes} ${t.minutes}</strong>.
+          </p>
         </div>
-        <div style="margin-top:10px;font-size:13px;color:${theme.muted};letter-spacing:.2px;">
-          ${brandName}
-        </div>
-      </div>
 
-      <!-- Card -->
-      <div style="background:${theme.card};border:1px solid ${theme.border};border-radius:16px;padding:22px;box-shadow:0 14px 40px rgba(0,0,0,.35);font-family:Arial,sans-serif;color:${theme.text};">
+        <!-- Body -->
+        <div style="padding:22px;text-align:center;">
 
-        <!-- Title -->
-        <h2 style="margin:0 0 8px;font-size:20px;line-height:1.3;color:${theme.text};">
-          Password reset code
-        </h2>
+          <div style="margin:0 auto;max-width:460px;padding:18px 14px;border-radius:18px;border:1px solid ${theme.border};background:linear-gradient(180deg, rgba(24,199,122,.10), rgba(124,255,178,.05));box-shadow:0 12px 28px ${theme.glow};">
+            <div style="font-size:12px;color:${theme.muted};letter-spacing:.18em;text-transform:uppercase;">
+              ${t.codeLabel}
+            </div>
 
-        <p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:${theme.muted};">
-          We received a request to reset your password. Use the code below to continue.
-        </p>
+            <div style="margin-top:12px;display:inline-block;padding:14px 18px;border-radius:16px;background:#ffffff;border:1px solid ${theme.border};">
+              <div style="${otpDirectionStyle} letter-spacing:10px;font-weight:900;font-size:32px;line-height:1;color:${theme.green};">
+                ${safeOtp}
+              </div>
+            </div>
 
-        <!-- OTP Box -->
-        <div style="text-align:center;margin:18px 0 10px;">
-          <div style="display:inline-block;padding:14px 18px;border-radius:14px;background:rgba(124,255,178,.10);border:1px solid ${theme.border};">
-            <div style="letter-spacing:8px;font-weight:900;font-size:28px;color:${theme.green};">
-              ${safeOtp}
+            <div style="margin-top:12px;font-size:12px;color:${theme.muted};">
+              ${t.dontShare}
             </div>
           </div>
 
-          <p style="margin:12px 0 0;font-size:13px;color:${theme.muted};">
-            This code expires in
-            <strong style="color:${theme.text};">${expiresInMinutes} minutes</strong>.
-          </p>
+          <div style="margin:16px auto 0;max-width:460px;padding:14px 14px;border-radius:16px;background:${theme.softPanel};border:1px solid ${theme.border};text-align:${align};">
+            <p style="margin:0;font-size:13px;line-height:1.7;color:${theme.muted};">
+              ${t.ignore}
+            </p>
+          </div>
+
+          <div style="margin:18px auto 0;max-width:460px;padding-top:16px;border-top:1px solid ${theme.border};font-size:12px;line-height:1.7;color:${theme.muted};text-align:${align};">
+            ${t.help}
+            <a href="mailto:${supportEmail}" style="color:${theme.green};text-decoration:none;font-weight:700;">
+              ${supportEmail}
+            </a>
+          </div>
+
         </div>
-
-        <!-- Security note -->
-        <div style="margin-top:14px;padding:12px 14px;border-radius:14px;background:rgba(24,199,122,.08);border:1px solid ${theme.border};">
-          <p style="margin:0;font-size:13px;line-height:1.6;color:${theme.muted};">
-            If you didn’t request this, you can safely ignore this email — your password will remain unchanged.
-          </p>
-        </div>
-
-        <hr style="border:none;border-top:1px solid rgba(124,255,178,.14);margin:18px 0;" />
-
-        <!-- Help -->
-        <div style="font-size:12px;line-height:1.7;color:${theme.muted};">
-          Need help? Contact us at
-          <a href="mailto:${supportEmail}" style="color:${theme.green};text-decoration:none;font-weight:700;">
-            ${supportEmail}
-          </a>
-        </div>
-
       </div>
 
-      <!-- Footer -->
-      <div style="text-align:center;font-family:Arial,sans-serif;margin-top:14px;color:rgba(167,200,182,.75);font-size:12px;line-height:1.6;">
-        <p style="margin:0;">© ${year} ${brandName}. All rights reserved.</p>
+      <div style="text-align:center;margin-top:14px;color:#94A3B8;font-size:12px;line-height:1.6;">
+        <p style="margin:0;">© ${year} ${escapeHtml(brandName)}. All rights reserved.</p>
       </div>
 
     </div>
   </div>
   `;
 };
-
-
 
 
 

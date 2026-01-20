@@ -168,7 +168,9 @@ exports.sendPasswordResetEmailToClient = async ({ email }) => {
   }
 };
 
-exports.sendOTPPasswordResetEmailToClient = async ({ email, otp }) => {
+
+
+exports.sendOTPPasswordResetEmailToClient = async ({ email, otp, lang }) => {
   try {
     if (!otp) throw new Error("Missing `otp`");
 
@@ -176,7 +178,7 @@ exports.sendOTPPasswordResetEmailToClient = async ({ email, otp }) => {
       to: email,
       subject: "Password Reset OTP",
       text: `Your password reset OTP is: ${otp}`,
-      html: otpPasswordResetEmailTemplate({ otp }), // ensure template supports { otp }
+      html: otpPasswordResetEmailTemplate({ otp, lang }), // ensure template supports { otp }
       from: "YallaPay Team <It@yallapayapp.com>",
     });
 

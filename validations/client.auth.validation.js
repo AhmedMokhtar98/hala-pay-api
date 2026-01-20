@@ -538,6 +538,32 @@ module.exports = {
           "string.min": "errors.passwordTooShort",
           "any.required": "errors.requiredPassword",
         }),
+
+      otp: Joi.string()
+        .trim()
+        .min(4) // change to 6 if your OTP is 6 digits
+        .max(8) // adjust if needed
+        .required()
+        .messages({
+          "string.base": "errors.validOtp",
+          "string.empty": "errors.emptyOtp",
+          "string.min": "errors.validOtp",
+          "string.max": "errors.validOtp",
+          "any.required": "errors.requiredOtp",
+        }),
+    }).options(joiOptions),
+  },
+
+  refreshTokenValidation: {
+    body: Joi.object({
+      refreshToken: Joi.string()
+        .trim()
+        .required()
+        .messages({
+          "string.base": "errors.validRefreshToken",
+          "string.empty": "errors.emptyRefreshToken",
+          "any.required": "errors.requiredRefreshToken",
+        }),
     }).options(joiOptions),
   },
 };
