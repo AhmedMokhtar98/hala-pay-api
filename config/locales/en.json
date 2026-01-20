@@ -71,7 +71,8 @@
     "invalid_phone_or_otp": "Invalid phone number or OTP.",
     "validFCMToken": "FCM Token must be a string.",
     "requiredFCMToken": "FCM Token is required.",
-    "emptyFCMToken": "FCM Token cannot be empty."
+    "emptyFCMToken": "FCM Token cannot be empty.",
+    "email_not_found": "Email not found"
   },
   "success": {
     "record_updated": "Record updated successfully",
@@ -82,6 +83,7 @@
     "otp_verified": "OTP verified successfully",
     "otp_sent": "OTP sent successfully",
     "otp_sent_and_valid_5_minutes": "OTP sent successfully and is valid for 5 minutes",
-    "registered_successfully": "Registered successfully"
+    "registered_successfully": "Registered successfully",
+    "password_reset_otp_sent": "Password reset OTP sent successfully to your email"
   }
 }

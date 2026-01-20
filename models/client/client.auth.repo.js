@@ -4,7 +4,8 @@ const { ConflictException, UnauthorizedException, BadRequestException } = requir
 const bcrypt = require("bcrypt");
 const Client = require("./client.model");
 const jwtHelper = require("../../helpers/jwt.helper");
-const { sendOTP, verifyLoginOTP } = require("../../redis/phoneOtp.redis");
+const { sendOTP, verifyLoginOTP, sendEmailOTP } = require("../../redis/phoneOtp.redis");
+const { sendOTPPasswordResetEmailToClient } = require("../../helpers/emailService.helper");
 
 
 const SAFE_SELECT = { password: 0, __v: 0 };
@@ -272,12 +273,10 @@ exports.forgotPassword = async (email) => {
   email = normalizeEmail(email);
   const client = await Client.findOne({ email });
   if (!client)  { throw new ConflictException("errors.email_not_found");};
-
-  // Here you would typically generate a password reset token and send it via email
-  // For simplicity, we'll just return a success message
+  await sendEmailOTP(email);
   return {
     success: true,
     code: 200,
-    message: "success.operation_successful"
+    message: "success.password_reset_otp_sent",
   };
 };

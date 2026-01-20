@@ -1,176 +1,268 @@
-const sgMail = require('@sendgrid/mail');
-const jwtHelper = require("../helpers/jwt.helper")
-const { supportEmailTemplate, passwordResetEmailTemplate, subscriptionPaymentTemplate, subscriptionPaymentText, emailVerificationTemplate } = require('../utils/emailTemplates');
-require('dotenv').config();
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+// helpers/email.helper.js
+'use strict';
 
-require('dotenv').config(); // Load .env variables
+require("dotenv").config();
+const nodemailer = require("nodemailer");
+const jwtHelper = require("../helpers/jwt.helper");
 
-const nodemailer = require('nodemailer');
+const {
+  supportEmailTemplate,
+  passwordResetEmailTemplate,
+  subscriptionPaymentTemplate,
+  subscriptionPaymentText,
+  emailVerificationTemplate,
+  otpPasswordResetEmailTemplate,
+} = require("../utils/emailTemplates");
 
-const createTransporter = () => {
-    return nodemailer.createTransport({
-      host: 'mail.privateemail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      connectionTimeout: 20000 // 20 seconds
-    });
-};
+/* =========================================
+   1) SMTP Transporter (PrivateEmail)
+   ========================================= */
+function createTransporter() {
+  const host = (process.env.EMAIL_HOST || "mail.privateemail.com").trim();
+  const port = Number(process.env.EMAIL_PORT || 465);
+  const secure = String(process.env.EMAIL_SECURE ?? "true") === "true";
 
+  const user = (process.env.EMAIL_USER || "").trim();
+  const pass = (process.env.EMAIL_PASS || "").trim();
+
+  if (!user || !pass) {
+    console.warn("⚠️ Missing EMAIL_USER / EMAIL_PASS in .env");
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure, // true for 465 SSL, false for 587 STARTTLS
+    auth: { user, pass },
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+    connectionTimeout: 20000,
+    greetingTimeout: 20000,
+    socketTimeout: 20000,
+  });
+}
 
 const transporter = createTransporter();
 
+/* =========================================
+   2) Helpers
+   ========================================= */
+function normalizeFrom(from) {
+  // Default: YallaPay Team <It@yallapayapp.com>
+  return (
+    (from && String(from).trim()) ||
+    (process.env.EMAIL_FROM && String(process.env.EMAIL_FROM).trim()) ||
+    "YallaPay Team <It@yallapayapp.com>"
+  );
+}
+
+function safeError(err) {
+  return {
+    message: err?.message,
+    code: err?.code,
+    response: err?.response,
+    responseCode: err?.responseCode,
+    command: err?.command,
+  };
+}
+
+/**
+ * Generic mail sender (Promise-based)
+ * @param {Object} args
+ * @param {string|string[]} args.to
+ * @param {string} args.subject
+ * @param {string} [args.text]
+ * @param {string} [args.html]
+ * @param {string} [args.from]
+ */
+async function sendMail({ to, subject, text, html, from }) {
+  if (!to) throw new Error("Missing `to`");
+  if (!subject) throw new Error("Missing `subject`");
+
+  const mailOptions = {
+    from: normalizeFrom(from),
+    to,
+    subject,
+    text,
+    html,
+  };
+
+  const info = await transporter.sendMail(mailOptions);
+
+  return {
+    ok: true,
+    messageId: info?.messageId,
+    accepted: info?.accepted || [],
+    rejected: info?.rejected || [],
+    response: info?.response,
+  };
+}
+
+/* =========================================
+   3) Exports (Nodemailer version)
+   ========================================= */
 
 exports.sendEmailVerificationLink = async ({ email, emailToken }) => {
-  const mailOptions = {
-    from: 'Hostwover Team <info@hostwover.com>', // Display name + email
-    to: email,
-    subject: 'Email Verification',
-    text: `Please click the following link to verify your email: ${emailToken}`,
-    html: `<p>Please click the following link to verify your email: <a href="${emailToken}">${emailToken}</a></p>`,
-    html: emailVerificationTemplate({ emailToken }), // Use imported template
-
-  };
   try {
-      // Send the email
-      transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-        console.log('Error details: ', error); // Log the detailed error for debugging
-        return res.status(500).send('Error sending email.');
-        }
-        return {
-          success: true,
-          code: 201, // 201 for success
-          message: i18n.__("Registration successful! Please check your email to verify.")
-        };
-      });
-  } catch (error) {
-      console.error('Error sending email:', error.response.body); // Log the detailed error
-      return {
-          success: false,
-          code: 500, // Return 500 for any email sending failure
-          message: 'Failed to send email',
-      };
-  }
-};
+    await sendMail({
+      to: email,
+      subject: "Email Verification",
+      text: `Please click the following link to verify your email: ${emailToken}`,
+      html: emailVerificationTemplate({ emailToken }),
+      from: "YallaPay Team <It@yallapayapp.com>",
+    });
 
-
-
-exports.sendSupportEmailToCompany = async ({ name, company, email, phone, inquiryType, message }) => {
-  const msg = {
-      to: 'info@blue202labs.com',
-      from: {
-        email: 'info@blue202labs.com', // Your verified email address
-        name: 'Ticketeer Support' // The display name you want to show
-      },
-      subject: 'New Support Request',
-      html: supportEmailTemplate({ name, company, email, phone, inquiryType, message }), // Use imported template
-  };
-  
-  try {
-      await sgMail.send(msg);
-      return {
-          success: true,
-          code: 201, // 201 for success
-          message: 'Email sent successfully',
-      };
-  } catch (error) {
-      console.error('Error sending email:', error.response.body); // Log the detailed error
-      return {
-          success: false,
-          code: 500, // Return 500 for any email sending failure
-          message: 'Failed to send email',
-      };
-  }
-};
-
-
-exports.sendPasswordResetEmailToClient = async ({ email }) => {
-  const token = jwtHelper.generateToken({email}, "1d")
-  const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-  const msg = {
-    to: email,
-    from: {
-      email: 'info@blue202labs.com', // Your verified email address
-      name: 'Ticketeer Team' // The display name you want to show
-    },
-    subject: 'Password Reset Request',
-    text: `You have requested to reset your password. Please click the button below to reset your password. This link is valid for 1 hour.`,
-    html: passwordResetEmailTemplate({ resetLink }), // Use imported template
-};
-  try {
-      await sgMail.send(msg);
-      return {
-        success: true,
-        code: 201, // 201 for success
-        message: 'Email sent successfully',
-    };
-  } catch (error) {
-      console.error('Error sending password reset email:', error);
-      return { success: false, code: 500, message: 'Failed to send password reset email.' };
-  }
-};
-exports.sendSubscriptionPaymentEmail = async ({ totalPrice, invoiceUrl, customer_name, email, plan, tierDuration, subscriptionStartDate, subscriptionEndDate  }) => {
-  const msg = {
-    to: email,
-    from: {
-      email: 'info@blue202labs.com', // Your verified email address
-      name: 'Ticketeer Team' // The display name you want to show
-    },
-    subject: 'Ticketeer Subscription Payment Confirmation',
-    text:subscriptionPaymentText({totalPrice, invoiceUrl, customer_name, plan, tierDuration, subscriptionStartDate, subscriptionEndDate}),
-    html: subscriptionPaymentTemplate({totalPrice, invoiceUrl, customer_name, plan, tierDuration, subscriptionStartDate, subscriptionEndDate})
-    };
-
-  try {
-    await sgMail.send(msg);
     return {
       success: true,
-      code: 201, // 201 for success
-      message: 'Email sent successfully',
+      code: 201,
+      message: "Registration successful! Please check your email to verify.",
     };
   } catch (error) {
-    console.error('Error sending subscription payment email:', error);
-    return { success: false, code: 500, message: 'Failed to send subscription payment email.' };
+    console.error("Error sending verification email:", safeError(error));
+    return { success: false, code: 500, message: "Failed to send email" };
   }
 };
 
+exports.sendSupportEmailToCompany = async ({
+  name,
+  company,
+  email,
+  phone,
+  inquiryType,
+  message,
+}) => {
+  try {
+    await sendMail({
+      to: "It@yallapayapp.com", // send support requests to your inbox
+      subject: "New Support Request",
+      html: supportEmailTemplate({ name, company, email, phone, inquiryType, message }),
+      from: "YallaPay Support <It@yallapayapp.com>",
+    });
 
-// __________________________________________________________________________________________________//
+    return { success: true, code: 201, message: "Email sent successfully" };
+  } catch (error) {
+    console.error("Error sending support email:", safeError(error));
+    return { success: false, code: 500, message: "Failed to send email" };
+  }
+};
+
+exports.sendPasswordResetEmailToClient = async ({ email }) => {
+  try {
+    const token = jwtHelper.generateToken({ email }, "1d");
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+    await sendMail({
+      to: email,
+      subject: "Password Reset Request",
+      text:
+        "You have requested to reset your password. Please click the button below to reset your password.",
+      html: passwordResetEmailTemplate({ resetLink }),
+      from: "YallaPay Team <It@yallapayapp.com>",
+    });
+
+    return { success: true, code: 201, message: "Email sent successfully" };
+  } catch (error) {
+    console.error("Error sending password reset email:", safeError(error));
+    return { success: false, code: 500, message: "Failed to send password reset email." };
+  }
+};
+
+exports.sendOTPPasswordResetEmailToClient = async ({ email, otp }) => {
+  try {
+    if (!otp) throw new Error("Missing `otp`");
+
+    await sendMail({
+      to: email,
+      subject: "Password Reset OTP",
+      text: `Your password reset OTP is: ${otp}`,
+      html: otpPasswordResetEmailTemplate({ otp }), // ensure template supports { otp }
+      from: "YallaPay Team <It@yallapayapp.com>",
+    });
+
+    return { success: true, code: 201, message: "Email sent successfully" };
+  } catch (error) {
+    console.error("Error sending OTP reset email:", safeError(error));
+    return { success: false, code: 500, message: "Failed to send OTP email." };
+  }
+};
+
+exports.sendSubscriptionPaymentEmail = async ({
+  totalPrice,
+  invoiceUrl,
+  customer_name,
+  email,
+  plan,
+  tierDuration,
+  subscriptionStartDate,
+  subscriptionEndDate,
+}) => {
+  try {
+    await sendMail({
+      to: email,
+      subject: "Subscription Payment Confirmation",
+      text: subscriptionPaymentText({
+        totalPrice,
+        invoiceUrl,
+        customer_name,
+        plan,
+        tierDuration,
+        subscriptionStartDate,
+        subscriptionEndDate,
+      }),
+      html: subscriptionPaymentTemplate({
+        totalPrice,
+        invoiceUrl,
+        customer_name,
+        plan,
+        tierDuration,
+        subscriptionStartDate,
+        subscriptionEndDate,
+      }),
+      from: "YallaPay Team <It@yallapayapp.com>",
+    });
+
+    return { success: true, code: 201, message: "Email sent successfully" };
+  } catch (error) {
+    console.error("Error sending subscription payment email:", safeError(error));
+    return { success: false, code: 500, message: "Failed to send subscription payment email." };
+  }
+};
 
 exports.sendMultipleEmails = async ({ data }) => {
-  // Extract email addresses and send emails
-  const emailPromises = data.map(async (row) => {
-    if (row.email) { // Ensure the email field exists
-      const msg = {
-        to: row.email,
-        from: {
-          email: 'info@blue202labs.com', // Your verified email address
-          name: 'Ticketeer Team' // The display name you want to show
-        },
-        subject: 'Invitation',
-        text: `Hi ${row.firstName},\n\nElvouchers offers gift vouchers for your favorite stores. Join us today for a seamless shopping experience!`,
-        html: subscriptionPaymentTemplate({ name: row.firstName + ' ' + row.lastName })
-      };
+  try {
+    const rows = Array.isArray(data) ? data : [];
+
+    const emailPromises = rows.map(async (row) => {
+      if (!row?.email) return;
+
+      const fullName = `${row.firstName || ""} ${row.lastName || ""}`.trim();
 
       try {
-        await sgMail.send(msg);
-        console.log(`Email sent to ${row.email}`);
+        await sendMail({
+          to: row.email,
+          subject: "Invitation",
+          text: `Hi ${row.firstName || ""},\n\nJoin us today for a seamless shopping experience!`,
+          html: subscriptionPaymentTemplate({ name: fullName }),
+          from: "YallaPay Team <It@yallapayapp.com>",
+        });
+        console.log(`✅ Email sent to ${row.email}`);
       } catch (error) {
-        console.error(`Error sending email to ${row.email}:`, error);
+        console.error(`❌ Error sending email to ${row.email}:`, safeError(error));
       }
-    }
-  });
+    });
 
-  try {
     await Promise.all(emailPromises);
-    return { success: true, message: 'Emails sent successfully.' };
+
+    return { success: true, message: "Emails sent successfully." };
   } catch (error) {
-    console.error('Error processing emails:', error);
-    return { success: false, message: 'Error processing emails.' };
+    console.error("Error processing emails:", safeError(error));
+    return { success: false, message: "Error processing emails." };
   }
 };
+
+/* =========================================
+   4) Optional: export sendMail too
+   ========================================= */
+exports._sendMail = sendMail;
+exports._transporter = transporter;

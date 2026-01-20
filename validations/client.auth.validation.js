@@ -496,6 +496,24 @@ module.exports = {
     .unknown(false), // ✅ blocks extra fields (recommended)
   },
 
+  
+
+  // ✅ Forgot password
+  forgotPasswordValidation: {
+    body: Joi.object({
+      email: Joi.string()
+        .trim()
+        .email({ minDomainSegments: 2 })
+        .required()
+        .messages({
+          "string.base": "errors.validEmail",
+          "string.email": "errors.validEmail",
+          "string.empty": "errors.emptyEmail",
+          "any.required": "errors.requiredEmail",
+        }),
+    }).options(joiOptions),
+  },
+
   // ✅ Reset password
   resetPasswordValidation: {
     body: Joi.object({
@@ -523,3 +541,5 @@ module.exports = {
     }).options(joiOptions),
   },
 };
+
+

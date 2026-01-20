@@ -82,7 +82,8 @@
     "invalid_phone_or_otp": "رقم الموبايل أو رمز التحقق (OTP) غير صالح.",
     "validFCMToken": "رمز FCM يجب أن يكون نصاً.",
     "requiredFCMToken": "رمز FCM مطلوب.",
-    "emptyFCMToken": "رمز FCM مينفعش يكون فاضي."
+    "emptyFCMToken": "رمز FCM مينفعش يكون فاضي.",
+    "email_not_found": "البريد الإلكتروني غير موجود"
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",
@@ -93,6 +94,7 @@
     "otp_verified": "تم التحقق من رمز التحقق (OTP) بنجاح",
     "otp_sent": "تم إرسال رمز التحقق (OTP) بنجاح",
     "otp_sent_and_valid_5_minutes": "تم إرسال رمز التحقق (OTP) بنجاح وهو صالح لمدة 5 دقائق",
-    "registered_successfully": "تم التسجيل بنجاح"
-  }
+    "registered_successfully": "تم التسجيل بنجاح",
+    "password_reset_otp_sent": "تم إرسال رمز التحقق (OTP) لإعادة تعيين كلمة المرور بنجاح إلى بريدك الإلكتروني"
+   }
 }
