@@ -117,8 +117,6 @@ const PORT = process.env.PORT || 7000;
 
 async function startServer() {
   try {
-    // 1) Connect DB
-    // If connectDB doesn't return a promise, it will just run
     await Promise.resolve(connectDB());
     console.log("✅ MongoDB connected");
 
