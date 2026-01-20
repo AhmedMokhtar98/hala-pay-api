@@ -4,6 +4,7 @@
 const otpGenerator = require("otp-generator");
 const { connectRedis } = require("../redis/redis.config");
 const { UnauthorizedException } = require("../middlewares/errorHandler/exceptions");
+const { sendWhatsAppOtp } = require("../helpers/sendWhatsAppMessage");
 
 const OTP_TTL_SECONDS = Number(process.env.OTP_TTL_SECONDS || 300); // 5 min
 
@@ -16,7 +17,7 @@ const otpKey = (phoneCode, phoneNumber) =>
  * ✅ Send OTP (stores raw OTP in Redis with TTL)
  * NOTE: For production, consider hashing OTP instead of storing raw.
  */
-exports.sendLoginOTP = async (phoneCode, phoneNumber) => {
+exports.sendOTP = async (phoneCode, phoneNumber) => {
   const pc = normalize(phoneCode);
   const pn = normalize(phoneNumber);
   if (!pc) return { success: false, code: 400, message: "errors.requiredPhoneCode" };
@@ -37,7 +38,7 @@ exports.sendLoginOTP = async (phoneCode, phoneNumber) => {
 
   // DEV ONLY
   console.log("📩 OTP (DEV ONLY):", { to: `${pc}${pn}`, otp });
-
+  await sendWhatsAppOtp({ to: `${pc}${pn}`, otp });
   return {
     success: true,
     code: 200,

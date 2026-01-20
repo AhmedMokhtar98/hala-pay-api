@@ -4,7 +4,7 @@ const { ConflictException, UnauthorizedException, BadRequestException } = requir
 const bcrypt = require("bcrypt");
 const Client = require("./client.model");
 const jwtHelper = require("../../helpers/jwt.helper");
-const { sendLoginOTP, verifyLoginOTP } = require("../../redis/phoneOtp.redis");
+const { sendOTP, verifyLoginOTP } = require("../../redis/phoneOtp.redis");
 
 
 const SAFE_SELECT = { password: 0, __v: 0 };
@@ -134,7 +134,7 @@ exports.register = async (payload = {}) => {
 exports.sendOTP = async (phoneCode, phoneNumber) => {
   phoneCode = String(phoneCode || "").trim();
   phoneNumber = String(phoneNumber || "").trim();
-  const result =await sendLoginOTP(phoneCode, phoneNumber);
+  const result =await sendOTP(phoneCode, phoneNumber);
   return {
     success: true,
     code: 200,
