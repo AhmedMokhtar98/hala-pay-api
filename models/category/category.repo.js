@@ -124,14 +124,11 @@ exports.listCategories = async (
   return { success: true, code: 200, result: categories, count, page: pageNumber, limit: limitNumber };
 };
 
-exports.getCategory = async (categoryId, options = { populateStore: true }) => {
+exports.getCategory = async (categoryId) => {
   let query = categoryModel.findById(categoryId);
 
-  if (options?.populateStore) {
-    query = query.populate("store", "businessName storeId logo");
-  }
 
-  const doc = await query.lean();
+  const doc = await query.lean().populate("store", "businessName storeId logo");
   if (!doc) return { success: false, code: 404, message: "Category not found" };
 
   return { success: true, code: 200, result: doc };

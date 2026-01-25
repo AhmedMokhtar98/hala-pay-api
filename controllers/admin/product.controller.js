@@ -26,11 +26,7 @@ exports.listProducts = async (req, res) => {
 exports.getProductDetails = async (req, res) => {
   const { productId } = req.params;
 
-  const populate =
-    String(req.query.populate || "").toLowerCase() === "true" ||
-    String(req.query.populate || "") === "1";
-
-  const operationResultObject = await productRepo.getProduct(productId, { populate });
+  const operationResultObject = await productRepo.getProduct(productId);
   return res.status(operationResultObject.code).json(operationResultObject);
 };
 

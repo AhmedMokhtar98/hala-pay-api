@@ -20,7 +20,7 @@ function stripTokenMeta(payload) {
 exports.generateToken = (payloadObject) => {
   try {
     const accessExpiry = process.env.ACCESS_TOKEN_EXPIRY || "1d";
-    const refreshExpiry = process.env.REFRESH_TOKEN_EXPIRY || "30d";
+    const refreshExpiry = process.env.REFRESH_TOKEN_EXPIRY || "5m";
 
     const cleanPayload = stripTokenMeta(payloadObject);
 

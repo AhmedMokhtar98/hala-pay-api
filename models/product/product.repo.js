@@ -153,14 +153,10 @@ exports.listProducts = async (
   return { success: true, code: 200, result: products, count, page: pageNumber, limit: limitNumber };
 };
 
-exports.getProduct = async (productId, options = { populate: false }) => {
+exports.getProduct = async (productId) => {
   let q = productModel.findById(productId);
 
-  if (options?.populate) {
-    q = q.populate("store", "businessName storeId logo").populate("category", "name image store isActive");
-  }
-
-  const doc = await q.lean();
+  const doc = await q.lean().populate("store", "businessName storeId logo").populate("category", "name image store isActive");
   if (!doc) return { success: false, code: 404, message: "Product not found" };
 
   return { success: true, code: 200, result: doc };
