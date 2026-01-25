@@ -2,8 +2,8 @@ const router = require("express").Router();
 const categoryController = require("../../controllers/admin/category.controller");
 const validator = require("../../helpers/validation.helper");
 const errorHandler = require("../../middlewares/errorHandler");
-const { uploadImage } = require("../../multer/uploadImage");
 const { uploadCategoryImageValidation, removeCategoryImageValidation } = require("../../validations/category.validation");
+const { uploadImage } = require("../../multer/uploadImage");
 const categoryImageUpload = uploadImage({ module: "categories", idParam: "categoryId" });
 
 // You must plug your multer here:

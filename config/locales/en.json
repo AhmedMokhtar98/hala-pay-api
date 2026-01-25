@@ -79,7 +79,22 @@
     "invalid_or_expired_refresh_token": "Invalid or expired refresh token",
     "expected_refresh_token": "Expected a refresh token.",
     "missing_refresh_token_id": "Refresh token is missing required information.",
-    "missing_token": "Token data is missing required information."
+    "missing_token": "Token data is missing required information.",
+    "fieldNotAllowed": "This field is not allowed.",
+    "emptyOtp": "OTP cannot be empty.",
+    "validOtp": "OTP must be a string.",
+    "newPasswordMustBeDifferent": "New password must be different from the old password.",
+    "passwordTooWeak": "Password is too weak. It must contain at least 8 characters, including uppercase, lowercase, number, and special character.",
+    "incorrectOldPassword": "The old password is incorrect.",
+    "passwordsDoNotMatch": "New password and confirm password do not match.",
+    "requiredNewPassword": "New password is required.",
+    "requiredOldPassword": "Old password is required.",
+    "image_field_name_must_be_image": "The field name for image upload must be 'image'.",
+    "image_file_required": "Image file is required.",
+    "sendOtp_chooseEmailOrPhone": "Please provide either email or phone number to send OTP.",
+    "requiredOtp": "OTP is required.",
+    "verifyOtp_chooseEmailOrPhone": "Please provide either email or phone number to verify OTP.",
+    "account_removed": "Account has been successfully removed."
   },
   "success": {
     "record_updated": "Record updated successfully",

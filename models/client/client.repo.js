@@ -5,9 +5,12 @@ const {
   ConflictException,
   BadRequestException,
 } = require("../../middlewares/errorHandler/exceptions");
-const mongoose = require("mongoose");
 const applySearchFilter = require("../../helpers/applySearchFilter");
 const prepareQueryObjects = require("../../helpers/prepareQueryObjects");
+const { verifyLoginOTP } = require("../../redis/phoneOtp.redis");
+const fs = require("fs");
+const path = require("path");
+const PUBLIC_DIR = path.join(process.cwd(), "public");
 
 /* ----------------------------------
    CREATE CLIENT
@@ -93,10 +96,6 @@ exports.list = async (filterObject, selectionObject = {}, sortObject = {}) => {
    UPDATE CLIENT
 ----------------------------------- */
 exports.update = async (_id, formObject) => {
-  if (!mongoose.Types.ObjectId.isValid(_id)) {
-    throw new BadRequestException("errors.invalid_id");
-  }
-
   formObject = normalize(formObject);
 
   const existing = await clientModel.findById(_id);
@@ -105,21 +104,61 @@ exports.update = async (_id, formObject) => {
   // ✅ Check uniqueness of email / phone pair (excluding same client)
   await checkUniqueness(formObject, existing._id);
 
-  // ✅ Password updated separately (so pre-save hash works)
-  if (formObject.password) {
-    existing.password = formObject.password;
-  }
-
   // ✅ Update other fields
   for (const key of Object.keys(formObject)) {
-    if (key !== "password") {
       existing[key] = formObject[key];
-    }
   }
 
+  
   const updated = await existing.save();
-  return { success: true, code: 200, result: updated };
+  delete updated.password; // remove password from object to be returned
+  const token = jwtHelper.generateToken(updated);
+  return { success: true, code: 200, result: updated, token };
 };
+
+
+// ____________________ PHONE NUMBER UPDATE _______________________ //
+
+exports.updatePhoneNumber = async (_id, formObject) => {
+  const { phoneCode, phoneNumber, otp } = formObject;
+      // ✅ OTP verify
+    await verifyLoginOTP(phoneCode, phoneNumber, otp);
+
+    formObject = normalize(formObject);
+    const existing = await clientModel.findById(_id);
+    if (!existing) throw new NotFoundException("errors.not_found");
+    // ✅ Check uniqueness of phone pair (excluding same client)
+    await checkUniqueness(formObject, existing._id);
+    // ✅ Update phone fields
+    existing.phoneCode = formObject.phoneCode;
+    existing.phoneNumber = formObject.phoneNumber;
+    
+    const updated = await existing.save();
+    delete updated.password; // remove password from object to be returned
+
+    const token = jwtHelper.generateToken(updated);
+    return { success: true, code: 200, result: updated, token };
+}
+
+
+
+
+// ____________________ PASSWORD UPDATE _______________________ //
+exports.updatePassword = async (_id, formObject) => {
+  const {oldPassword, newPassword } = formObject;
+      const existing = await clientModel.findById(_id);
+      if (!existing) throw new NotFoundException("errors.not_found");
+      // ✅ Compare old password
+      const match = await existing.comparePassword(oldPassword);
+      if (!match) throw new ConflictException("errors.password_incorrect");
+      // ✅ Update to new password
+      existing.password = newPassword;
+      const updated = await existing.save();
+      delete updated.password; // remove password from object to be returned
+
+      const token = jwtHelper.generateToken(updated);
+      return { success: true, code: 200, result: updated, token };
+}
 
 /* ----------------------------------
    UPDATE MANY
@@ -264,6 +303,109 @@ const checkUniqueness = async (
     throw new ConflictException("errors.phone_used");
   }
 };
+
+// upload client image
+
+exports.uploadClientImage = async (clientId, file) => {
+  if (!clientId) {
+    if (file?.path && fs.existsSync(file.path)) {
+      try { fs.unlinkSync(file.path); } catch (_) {}
+    }
+    throw new BadRequestException("errors.clientId_required");
+  }
+
+  if (!file?.filename) {
+    throw new BadRequestException("errors.image_file_required");
+  }
+
+  const doc = await clientModel.findById(clientId);
+  if (!doc) {
+    if (file?.path && fs.existsSync(file.path)) {
+      try { fs.unlinkSync(file.path); } catch (_) {}
+    }
+    throw new NotFoundException("errors.not_found");
+  }
+
+  // new url
+  const imageUrl = `/images/clients/${clientId}/${file.filename}`;
+  // delete old file if exists and inside our folder
+  const oldUrl = doc.image;
+  const prefix = `/images/clients/${clientId}/`;
+
+  if (oldUrl && typeof oldUrl === "string" && oldUrl.startsWith(prefix)) {
+    const oldFileName = oldUrl.split("/").pop();
+    if (oldFileName && oldFileName !== file.filename) {
+      const oldAbsPath = path.join(PUBLIC_DIR, "images", "clients", String(clientId), oldFileName);
+      if (fs.existsSync(oldAbsPath)) {
+        try { fs.unlinkSync(oldAbsPath); } catch (_) {}
+      }
+    }
+  }
+
+  doc.image = imageUrl; // ✅ STRING
+  await doc.save();
+
+  return {
+    success: true,
+    code: 200,
+    message: "Client image updated",
+    result: { clientId: String(doc._id), imageUrl },
+  };
+};
+
+exports.removeClientImage = async (clientId) => {
+  if (!clientId) {
+    throw new BadRequestException("errors.clientId_required");
+  }
+
+  const doc = await clientModel.findById(clientId);
+  if (!doc) throw new NotFoundException("errors.not_found");
+
+  const oldUrl = doc.image;
+  const prefix = `/images/clients/${clientId}/`;
+
+  if (oldUrl && typeof oldUrl === "string" && oldUrl.startsWith(prefix)) {
+    const oldFileName = oldUrl.split("/").pop();
+    if (oldFileName) {
+      const oldAbsPath = path.join(PUBLIC_DIR, "images", "clients", String(clientId), oldFileName);
+      if (fs.existsSync(oldAbsPath)) {
+        try { fs.unlinkSync(oldAbsPath); } catch (_) {}
+      }
+    }
+
+    // cleanup empty folder (best effort)
+    try {
+      const dir = path.join(PUBLIC_DIR, "images", "clients", String(clientId));
+      if (fs.existsSync(dir)) {
+        const remaining = fs.readdirSync(dir);
+        if (!remaining.length) fs.rmdirSync(dir);
+      }
+    } catch (_) {}
+  }
+
+  doc.image = ""; // ✅ clear STRING
+  await doc.save();
+
+  return {
+    success: true,
+    code: 200,
+    message: "Client image removed",
+  };
+};
+
+
+exports.removeAccount = async (clientId) => {
+  const existing = await clientModel.findById(clientId);
+  if (!existing) throw new NotFoundException("errors.not_found");
+  // remove account permanently
+  await clientModel.findByIdAndDelete(clientId);
+
+  // existing.isActive = false;
+  // await existing.save();
+  return { success: true, code: 200, message: "success.account_removed" };
+}
+
+
 
 /* =========================================================
    🧼 NORMALIZER

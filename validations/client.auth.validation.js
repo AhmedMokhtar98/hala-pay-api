@@ -324,10 +324,20 @@ module.exports = {
       .options(joiOptions),
   },
 
-  sendOtpValidation: {
+ sendOtpValidation: {
   body: Joi.object({
+    email: Joi.string()
+      .trim()
+      .email({ minDomainSegments: 2 })
+      .optional()
+      .messages({
+        "string.base": "errors.validEmail",
+        "string.email": "errors.validEmail",
+        "string.empty": "errors.emptyEmail",
+      }),
+
     phoneCode: makePhoneCodeSchema({
-      required: true,
+      required: false, // ✅ not always required now
       MIN_DIGITS: 1,
       MAX_DIGITS: 4,
       requiredKey: "errors.requiredPhoneCode",
@@ -338,7 +348,7 @@ module.exports = {
     }),
 
     phoneNumber: makePhoneNumberSchema({
-      required: true,
+      required: false, // ✅ not always required now
       MIN_DIGITS: 7,
       MAX_DIGITS: 15,
       requiredKey: "errors.requiredPhoneNumber",
@@ -348,13 +358,32 @@ module.exports = {
       maxKey: "errors.phoneNumberTooLong",
     }),
   })
+    // ✅ Either email OR (phoneCode + phoneNumber)
+    .xor("email", "phoneCode") // if email exists => phoneCode forbidden, and vice versa
+    .with("phoneCode", "phoneNumber") // phoneCode requires phoneNumber
+    .with("phoneNumber", "phoneCode") // phoneNumber requires phoneCode
+    .messages({
+      "object.xor": "errors.sendOtp_chooseEmailOrPhone",
+      "object.with": "errors.phoneBothRequired",
+      "object.unknown": "errors.fieldNotAllowed",
+    })
     .options(joiOptions)
     .unknown(false),
 },
-  verifyOtpValidation: {
+verifyOtpValidation: {
   body: Joi.object({
+    email: Joi.string()
+      .trim()
+      .email({ minDomainSegments: 2 })
+      .optional()
+      .messages({
+        "string.base": "errors.validEmail",
+        "string.email": "errors.validEmail",
+        "string.empty": "errors.emptyEmail",
+      }),
+
     phoneCode: makePhoneCodeSchema({
-      required: true,
+      required: false, // ✅ not always required
       MIN_DIGITS: 1,
       MAX_DIGITS: 4,
       requiredKey: "errors.requiredPhoneCode",
@@ -365,7 +394,7 @@ module.exports = {
     }),
 
     phoneNumber: makePhoneNumberSchema({
-      required: true,
+      required: false, // ✅ not always required
       MIN_DIGITS: 7,
       MAX_DIGITS: 15,
       requiredKey: "errors.requiredPhoneNumber",
@@ -375,21 +404,41 @@ module.exports = {
       maxKey: "errors.phoneNumberTooLong",
     }),
 
-    otp: Joi.string()
-      .trim()
-      .min(4) // change to 6 if your OTP is 6 digits
-      .max(8) // adjust if needed
+    otp: Joi.alternatives()
+      .try(
+        Joi.string().trim().pattern(/^\d+$/).min(4).max(8),
+        Joi.number().integer().min(10 ** (4 - 1)).max(10 ** 8 - 1)
+      )
+      .required()
+      .custom((value, helpers) => {
+        const s = String(value).trim();
+        if (!/^\d+$/.test(s)) return helpers.error("any.invalid");
+        if (s.length < 4 || s.length > 8) return helpers.error("any.invalid");
+        return s; // ✅ normalize to string
+      }, "normalize otp")
       .messages({
-        "string.base": "errors.validOtp",
-        "string.empty": "errors.emptyOtp",
-        "string.min": "errors.validOtp",
-        "string.max": "errors.validOtp",
+        "alternatives.match": "errors.validOtp",
+        "any.invalid": "errors.validOtp",
         "any.required": "errors.requiredOtp",
+        "string.empty": "errors.emptyOtp",
+        "string.base": "errors.validOtp",
+        "number.base": "errors.validOtp",
       }),
   })
+    // ✅ Either email OR phone (not both)
+    .xor("email", "phoneCode")
+    // ✅ if phoneCode/phoneNumber used, they must come together
+    .with("phoneCode", "phoneNumber")
+    .with("phoneNumber", "phoneCode")
+    .messages({
+      "object.xor": "errors.verifyOtp_chooseEmailOrPhone",
+      "object.with": "errors.phoneBothRequired",
+      "object.unknown": "errors.fieldNotAllowed",
+    })
     .options(joiOptions)
     .unknown(false),
 },
+
 
 
 
@@ -566,6 +615,8 @@ module.exports = {
         }),
     }).options(joiOptions),
   },
+
+
 };
 
 

@@ -13,13 +13,13 @@ exports.phoneCheck = async (req, res) => {
 }
 
 exports.sendOTP = async (req, res) => {
-  const { phoneCode, phoneNumber } = req.body;
-  const operationResultObject = await clientAuthRepo.sendOTP(phoneCode, phoneNumber);
+  const { phoneCode, phoneNumber, email } = req.body;
+  const operationResultObject = await clientAuthRepo.sendOTP(phoneCode, phoneNumber, email);
   return res.status(operationResultObject.code).json(operationResultObject);
 }
 exports.verifyOTP = async (req, res) => {
-  const { phoneCode, phoneNumber, otp } = req.body;
-  const operationResultObject = await clientAuthRepo.verifyOTP(phoneCode, phoneNumber, otp);
+  const { phoneCode, phoneNumber, email, otp } = req.body;
+  const operationResultObject = await clientAuthRepo.verifyOTP(phoneCode, phoneNumber, email, otp);
   return res.status(operationResultObject.code).json(operationResultObject);
 }
 exports.register = async (req, res) => {

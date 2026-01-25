@@ -90,7 +90,22 @@
     "invalid_or_expired_refresh_token": "رمز التحديث غير صالح أو منتهي الصلاحية",
     "expected_refresh_token": "كان متوقع رمز تحديث.",
     "missing_refresh_token_id": "رمز التحديث يفتقد لمعلومات مطلوبة.",
-    "missing_token": "بيانات الرمز تفتقد لمعلومات مطلوبة."
+    "missing_token": "بيانات الرمز تفتقد لمعلومات مطلوبة.",
+    "fieldNotAllowed": "هذا الحقل غير مسموح به.",
+    "emptyOtp": "رمز التحقق (OTP) مينفعش يكون فاضي.",
+    "validOtp": "رمز التحقق (OTP) يجب أن يكون نصاً.",
+    "newPasswordMustBeDifferent": "كلمة المرور الجديدة لازم تكون مختلفة عن القديمة.",
+    "passwordTooWeak": "كلمة المرور ضعيفة جدًا. لازم تحتوي على 8 أحرف على الأقل، بما في ذلك حرف كبير، حرف صغير، رقم، وحرف خاص.",
+    "incorrectOldPassword": "كلمة المرور القديمة غير صحيحة.",
+    "requiredNewPassword": "كلمة المرور الجديدة مطلوبة.",
+    "requiredOldPassword": "كلمة المرور القديمة مطلوبة.",
+    "image_field_name_must_be_image": "اسم الحقل لرفع الصورة لازم يكون 'image'.",
+    "image_file_required": "ملف الصورة مطلوب.",
+    "sendOtp_chooseEmailOrPhone": "من فضلك ابعت إما البريد الإلكتروني أو رقم الموبايل لإرسال رمز التحقق (OTP).",
+    "requiredOtp": "رمز التحقق (OTP) مطلوب.",
+    "verifyOtp_chooseEmailOrPhone": "من فضلك ابعت إما البريد الإلكتروني أو رقم الموبايل للتحقق من رمز التحقق (OTP).",
+    "account_removed": "تم حذف الحساب بنجاح."
+
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",

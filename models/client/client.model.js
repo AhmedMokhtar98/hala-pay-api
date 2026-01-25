@@ -27,7 +27,7 @@ const clientSchema = new mongoose.Schema(
     password: { type: String, required: true },
 
     birthDate: { type: Date },
-    image: { type: Object, default: {} },
+    image: { type: String, default: "" },
 
     isActive: { type: Boolean, default: true },
     isEmailVerified: { type: Boolean, default: false },

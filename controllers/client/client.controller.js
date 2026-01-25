@@ -1,8 +1,5 @@
 const i18n = require('i18n');
 const clientRepo = require("../../models/client/client.repo");
-// const s3StorageHelper = require("../../utils/s3FileStorage.util")
-// const batchRepo = require("../../models/batch/batch.repo");
-const jwtHelper = require("../../helpers/jwt.helper")
 
 exports.getClient = async (req, res) => {
     const _id = req?.user?._id || null;
@@ -12,9 +9,32 @@ exports.getClient = async (req, res) => {
 
 
 exports.updateClient = async (req, res) => {
-        const operationResultObject = await clientRepo.update(req.query._id, req.body);
-        const token = jwtHelper.generateToken(operationResultObject?.result, "1d")
-        return res.status(operationResultObject.code).json({newData:operationResultObject, token:token});
+    const operationResultObject = await clientRepo.update(req.user._id, req.body);
+    return res.status(operationResultObject.code).json(operationResultObject);
+}
+
+exports.updatePhoneNumber = async (req, res) => {
+    const operationResultObject = await clientRepo.updatePhoneNumber(req.user._id, req.body);
+    return res.status(operationResultObject.code).json(operationResultObject);
+}
+
+exports.updatePassword = async (req, res) => {
+    const operationResultObject = await clientRepo.updatePassword(req.user._id, req.body);
+    return res.status(operationResultObject.code).json(operationResultObject);
+}
+
+exports.uploadImage = async (req, res) => {
+  const clientId = req.user._id;
+  const file = req.file;
+
+  const op = await clientRepo.uploadClientImage(clientId, file);
+  return res.status(op.code).json(op);
+}
+
+exports.deleteImage = async (req, res) => {
+  const clientId = req.user._id;
+    const op = await clientRepo.removeClientImage(clientId);
+    return res.status(op.code).json(op);
 }
 
 
@@ -32,6 +52,11 @@ exports.removeClient = async (req, res) => {
     }
 }
 
+
+exports.removeAccount = async (req, res) => {
+        const operationResultObject = await clientRepo.removeAccount(req.user._id);
+        return res.status(operationResultObject.code).json(operationResultObject);
+}
 
 
 

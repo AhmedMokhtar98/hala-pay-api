@@ -5,7 +5,6 @@ const bcrypt = require("bcrypt");
 const Client = require("./client.model");
 const jwtHelper = require("../../helpers/jwt.helper");
 const { sendOTP, verifyLoginOTP, sendEmailOTP, verifyEmailOTP } = require("../../redis/phoneOtp.redis");
-const { sendOTPPasswordResetEmailToClient } = require("../../helpers/emailService.helper");
 
 
 const SAFE_SELECT = { password: 0, __v: 0 };
@@ -43,16 +42,28 @@ exports.phoneCheck = async (phoneCode, phoneNumber) => {
   };
 };
 
-exports.verifyOTP = async (phoneCode, phoneNumber, otp) => {
+exports.verifyOTP = async (phoneCode, phoneNumber, email, otp) => {
   phoneCode = String(phoneCode || "").trim();
   phoneNumber = String(phoneNumber || "").trim();
+  email = normalizeEmail(email);
   otp = String(otp || "").trim();
-  await verifyLoginOTP(phoneCode, phoneNumber, otp, true); // keepOtp = true
-  return {
-    success: true,
-    code: 200,
-    message: "success.otp_verified",
-  };
+
+  if (email) {
+    await verifyEmailOTP(email, otp);
+    return {
+      success: true,
+      code: 200,
+      message: "success.otp_verified",
+    };
+  }
+  else {
+    await verifyLoginOTP(phoneCode, phoneNumber, otp, true); // keepOtp = true
+    return {
+      success: true,
+      code: 200,
+      message: "success.otp_verified",
+    };
+  }
 };
 
 exports.register = async (payload = {}) => {
@@ -132,16 +143,28 @@ exports.register = async (payload = {}) => {
   };
 };
 
-exports.sendOTP = async (phoneCode, phoneNumber) => {
-  phoneCode = String(phoneCode || "").trim();
-  phoneNumber = String(phoneNumber || "").trim();
-  const result =await sendOTP(phoneCode, phoneNumber);
-  return {
-    success: true,
-    code: 200,
-    message: "success.otp_sent_and_valid_5_minutes",
-    result: result.result, // includes otp for dev purposes
-  };
+exports.sendOTP = async (phoneCode, phoneNumber, email) => {
+  if (email) {
+    email = normalizeEmail(email);
+    const result = await sendEmailOTP(email);
+    return {
+      success: true,
+      code: 200,
+      message: "success.otp_sent_and_valid_5_minutes",
+      result: result.result, // includes otp for dev purposes
+    };
+  }
+  else {
+    phoneCode = String(phoneCode || "").trim();
+    phoneNumber = String(phoneNumber || "").trim();
+    const result =await sendOTP(phoneCode, phoneNumber);
+    return {
+      success: true,
+      code: 200,
+      message: "success.otp_sent_and_valid_5_minutes",
+      result: result.result, // includes otp for dev purposes
+    };
+  }
 };
 
 

@@ -4,7 +4,7 @@ const Joi = require("joi");
 const joiOptions = {
   abortEarly: false,
   allowUnknown: false,
-  stripUnknown: true,
+  stripUnknown: false,
 };
 
 /* ------------------------------ Phone Validators ------------------------------ */
@@ -97,7 +97,7 @@ const phonePairPresenceRule = (obj, helpers) => {
 
 /* ------------------------------ Exports ------------------------------ */
 module.exports = {
-  createClientValidation: {
+  createClientValidationForAdmin: {
     body: Joi.object({
       firstName: Joi.string().trim().required().messages({
         "string.base": "errors.validFirstName",
@@ -189,7 +189,7 @@ module.exports = {
     }).options(joiOptions),
   },
 
-  updateClientValidation: {
+  updateClientValidationForAdmin: {
     body: Joi.object({
       firstName: Joi.string().trim().optional().messages({
         "string.base": "errors.validFirstName",
@@ -236,16 +236,6 @@ module.exports = {
         "string.base": "errors.validOS",
       }),
 
-      password: Joi.string().trim().min(6).optional().messages({
-        "string.base": "errors.validPassword",
-        "string.empty": "errors.emptyPassword",
-        "string.min": "errors.passwordTooShort",
-      }),
-
-      image: Joi.object().optional().messages({
-        "object.base": "errors.validImage",
-      }),
-
       isActive: Joi.boolean().optional().messages({
         "boolean.base": "errors.validIsActive",
       }),
@@ -265,10 +255,6 @@ module.exports = {
       birthDate: Joi.date().optional().messages({
         "date.base": "errors.validBirthDate",
       }),
-
-      joinDate: Joi.date().optional().messages({
-        "date.base": "errors.validJoinDate",
-      }),
     })
       .min(1)
       .custom(phonePairPresenceRule, "phone pair presence")
@@ -278,6 +264,48 @@ module.exports = {
       })
       .options(joiOptions),
   },
+
+
+  updateClientValidation: {
+    body: Joi.object({
+      firstName: Joi.string().trim().optional().messages({
+        "string.base": "errors.validFirstName",
+        "string.empty": "errors.validFirstName",
+      }),
+
+      lastName: Joi.string().trim().optional().messages({
+        "string.base": "errors.validLastName",
+        "string.empty": "errors.validLastName",
+      }),
+
+      email: Joi.string()
+        .trim()
+        .email({ minDomainSegments: 2 })
+        .optional()
+        .messages({
+          "string.base": "errors.validEmail",
+          "string.email": "errors.validEmail",
+          "string.empty": "errors.emptyEmail",
+        }),
+
+      os: Joi.string().trim().optional().messages({
+        "string.base": "errors.validOS",
+      }),
+
+      birthDate: Joi.date().optional().messages({
+        "date.base": "errors.validBirthDate",
+      }),
+    })
+      .min(1)
+      .custom(phonePairPresenceRule, "phone pair presence")
+      .messages({
+      "object.min": "errors.noFieldsToUpdate",
+      "object.with": "errors.phoneBothRequired",
+      "object.unknown": "errors.fieldNotAllowed", // ✅ unknown key message
+    })
+      .options(joiOptions),
+  },
+
 
   loginClientValidation: {
     body: Joi.object({
@@ -320,4 +348,44 @@ module.exports = {
       }),
     }).options(joiOptions),
   },
+  
+  // ✅ Change Password
+changePasswordValidation: {
+  body: Joi.object({
+    oldPassword: Joi.string()
+      .trim()
+      .min(6)
+      .required()
+      .messages({
+        "string.base": "errors.validOldPassword",
+        "string.empty": "errors.emptyOldPassword",
+        "string.min": "errors.passwordTooShort",
+        "any.required": "errors.requiredOldPassword",
+      }),
+
+    newPassword: Joi.string()
+      .trim()
+      .min(6)
+      .required()
+      .messages({
+        "string.base": "errors.validNewPassword",
+        "string.empty": "errors.emptyNewPassword",
+        "string.min": "errors.passwordTooShort",
+        "any.required": "errors.requiredNewPassword",
+      }),
+  })
+    .custom((obj, helpers) => {
+      // ✅ prevent same old/new password
+      if (String(obj.oldPassword) === String(obj.newPassword)) {
+        return helpers.error("any.invalid");
+      }
+      return obj;
+    }, "old/new password different")
+    .messages({
+      "any.invalid": "errors.newPasswordMustBeDifferent",
+      "object.unknown": "errors.fieldNotAllowed",
+    })
+    .options(joiOptions)
+    .unknown(false), // ✅ block extra keys
+},
 };

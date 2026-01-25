@@ -1,6 +1,7 @@
 // helpers/authorizer.helper.js
 
 const { permissions } = require("./permissions.helper");
+const mongoose = require("mongoose");
 const {
   BadRequestException,
   ConflictException,
@@ -110,10 +111,14 @@ function getRequesterId(req) {
 }
 
 function ensureIdentity(req) {
-  const requesterId = getRequesterId(req);
-  if (!req.user || !req.user._id || !requesterId) return false;
-  return String(requesterId) === String(req.user._id);
+  const requesterId = String(getRequesterId(req) || "");
+  const userId = String(req.user?._id || "");
+
+  if (!mongoose.Types.ObjectId.isValid(requesterId)) return false;
+
+  return requesterId === userId;
 }
+
 
 /** =========================
  * sanitizePermissionsObject
