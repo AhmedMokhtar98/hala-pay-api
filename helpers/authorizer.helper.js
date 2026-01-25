@@ -104,7 +104,8 @@ function getRequesterId(req) {
     req.query?.id ||
     req.query?._id ||
     req.body?.id ||
-    req.body?._id
+    req.body?._id ||
+    req?.user?._id
   );
 }
 

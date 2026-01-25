@@ -36,11 +36,10 @@ exports.find = async (filterObject) => {
    GET BY ID
 ----------------------------------- */
 exports.get = async (_id) => {
-  if (!mongoose.Types.ObjectId.isValid(_id)) {
-    throw new BadRequestException("errors.invalid_id");
-  }
 
   const client = await clientModel.findById(_id);
+  // delete sensitive info
+  delete client?.password;
   if (!client) throw new NotFoundException("errors.not_found");
 
   return { success: true, code: 200, result: client };

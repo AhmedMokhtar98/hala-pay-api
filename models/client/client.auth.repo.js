@@ -164,7 +164,7 @@ exports.login = async (payload = {}, type) => {
 
     if (result.isActive === false) throw new UnauthorizedException("errors.account_inactive");
     if (result.isPhoneVerified === false) throw new UnauthorizedException("errors.account_phoneNotVerified");
-    if (result.isEmailVerified === false) throw new UnauthorizedException("errors.account_emailNotVerified");
+    // if (result.isEmailVerified === false) throw new UnauthorizedException("errors.account_emailNotVerified");
 
     const passwordMatch = await bcrypt.compare(password, result.password);
     if (!passwordMatch) throw new UnauthorizedException("errors.invalid_email_or_password");

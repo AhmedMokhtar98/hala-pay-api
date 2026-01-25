@@ -5,38 +5,16 @@ const clientRepo = require("../../models/client/client.repo");
 const jwtHelper = require("../../helpers/jwt.helper")
 
 exports.getClient = async (req, res) => {
-    try {
-        const operationResultObject = await clientRepo.get({ _id: req.query._id }, { password: 0, token: 0 });
-        if(operationResultObject.code === 404 || operationResultObject.result.isActive === false){
-            return res.status(403).json(operationResultObject);
-        }
+    const _id = req?.user?._id || null;
+        const operationResultObject = await clientRepo.get(_id);
         return res.status(operationResultObject.code).json(operationResultObject);
-
-    } catch (err) {
-        console.log(`err.message`, err.message);
-        return res.status(500).json({
-            success: false,
-            code: 500,
-            error: i18n.__("internalServerError")
-        });
-    }
 }
 
 
 exports.updateClient = async (req, res) => {
-    try {
         const operationResultObject = await clientRepo.update(req.query._id, req.body);
         const token = jwtHelper.generateToken(operationResultObject?.result, "1d")
         return res.status(operationResultObject.code).json({newData:operationResultObject, token:token});
-
-    } catch (err) {
-        console.log(`err.message`, err.message);
-        return res.status(500).json({
-            success: false,
-            code: 500,
-            error: i18n.__("internalServerError")
-        });
-    }
 }
 
 

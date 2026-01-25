@@ -78,7 +78,8 @@
     "validRefreshToken": "Refresh token must be a string.",
     "invalid_or_expired_refresh_token": "Invalid or expired refresh token",
     "expected_refresh_token": "Expected a refresh token.",
-    "missing_refresh_token_id": "Refresh token is missing required information."
+    "missing_refresh_token_id": "Refresh token is missing required information.",
+    "missing_token": "Token data is missing required information."
   },
   "success": {
     "record_updated": "Record updated successfully",

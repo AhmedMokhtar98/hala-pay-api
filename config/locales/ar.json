@@ -89,7 +89,8 @@
     "validRefreshToken": "رمز التحديث يجب أن يكون نصاً.",
     "invalid_or_expired_refresh_token": "رمز التحديث غير صالح أو منتهي الصلاحية",
     "expected_refresh_token": "كان متوقع رمز تحديث.",
-    "missing_refresh_token_id": "رمز التحديث يفتقد لمعلومات مطلوبة."
+    "missing_refresh_token_id": "رمز التحديث يفتقد لمعلومات مطلوبة.",
+    "missing_token": "بيانات الرمز تفتقد لمعلومات مطلوبة."
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",
