@@ -1,6 +1,12 @@
 // validations/category.validation.js
 const Joi = require("joi");
 
+const joiOptions = {
+  abortEarly: false,
+  stripUnknown: true,
+  convert: true,
+};
+
 /* -----------------------------
   Shared primitives
 ----------------------------- */
@@ -29,15 +35,43 @@ const boolQuery = Joi.boolean()
   .messages({ "boolean.base": "errors.validBoolean" });
 
 /* -----------------------------
-  Category fields (NEW schema)
+  Category fields (match schema)
 ----------------------------- */
 
-const nameEn = Joi.string().trim().allow("").messages({
+// ✅ NOW REQUIRED (on create)
+const nameEnRequired = Joi.string()
+  .trim()
+  .min(1)
+  .required()
+  .messages({
+    "string.base": "errors.validCategoryNameEn",
+    "string.empty": "errors.emptyCategoryNameEn",
+    "string.min": "errors.emptyCategoryNameEn",
+    "any.required": "errors.requiredCategoryNameEn",
+  });
+
+const nameArRequired = Joi.string()
+  .trim()
+  .min(1)
+  .required()
+  .messages({
+    "string.base": "errors.validCategoryNameAr",
+    "string.empty": "errors.emptyCategoryNameAr",
+    "string.min": "errors.emptyCategoryNameAr",
+    "any.required": "errors.requiredCategoryNameAr",
+  });
+
+// ✅ Optional versions (for update)
+const nameEnOptional = Joi.string().trim().min(1).optional().messages({
   "string.base": "errors.validCategoryNameEn",
+  "string.empty": "errors.emptyCategoryNameEn",
+  "string.min": "errors.emptyCategoryNameEn",
 });
 
-const nameAr = Joi.string().trim().allow("").messages({
+const nameArOptional = Joi.string().trim().min(1).optional().messages({
   "string.base": "errors.validCategoryNameAr",
+  "string.empty": "errors.emptyCategoryNameAr",
+  "string.min": "errors.emptyCategoryNameAr",
 });
 
 const descriptionEn = Joi.string().trim().allow("").messages({
@@ -48,69 +82,72 @@ const descriptionAr = Joi.string().trim().allow("").messages({
   "string.base": "errors.validCategoryDescriptionAr",
 });
 
-const storeRef = Joi.object({
-  store: objectId.optional(),
-  storeId: storeId9.optional(),
-})
-  .or("store", "storeId")
-  .messages({
-    "object.missing": "errors.requiredStoreOrStoreId",
-  });
+const image = Joi.string().trim().allow("").messages({
+  "string.base": "errors.validCategoryImage",
+});
 
-/**
- * atLeastOneName:
- * - require at least one of nameEn/nameAr to be non-empty after trim
- */
-const atLeastOneName = (schema) =>
-  schema.custom((value, helpers) => {
-    const en = String(value?.nameEn || "").trim();
-    const ar = String(value?.nameAr || "").trim();
-    if (!en && !ar) return helpers.error("object.missing");
-    return value;
-  }, "require nameEn or nameAr (non-empty)")
-  // map the custom error to your i18n key
-  .messages({ "object.missing": "errors.requiredCategoryName" });
+const isActive = Joi.boolean().messages({
+  "boolean.base": "errors.validIsActive",
+});
 
 /* -----------------------------
-  Reusable param/query schemas
+  Params / Query
 ----------------------------- */
 
 const categoryIdParams = Joi.object({
   categoryId: objectId.required().messages({
     "any.required": "errors.requiredCategoryId",
   }),
-});
+})
+  .options(joiOptions)
+  .unknown(false);
 
 const categoryIdQuery = Joi.object({
   categoryId: objectId.required().messages({
     "any.required": "errors.requiredCategoryId",
   }),
-});
+})
+  .options(joiOptions)
+  .unknown(false);
+
+/* -----------------------------
+  Exports
+----------------------------- */
 
 module.exports = {
   /* -----------------------------
     CREATE
-    body: store/storeId + nameEn/nameAr (+ descs)
+    body: store + nameEn + nameAr (both required)
   ----------------------------- */
   createCategoryValidation: {
-    params: Joi.object({}).unknown(true),
-    query: Joi.object({}).unknown(true),
-    body: atLeastOneName(
-      storeRef.keys({
-        nameEn,
-        nameAr,
-        descriptionEn: descriptionEn.optional(),
-        descriptionAr: descriptionAr.optional(),
-      })
-    ),
+    params: Joi.object({}).options(joiOptions).unknown(true),
+    query: Joi.object({}).options(joiOptions).unknown(true),
+
+    body: Joi.object({
+      store: objectId.required().messages({
+        "any.required": "errors.requiredStore",
+      }),
+
+      // ✅ both required
+      nameEn: nameEnRequired,
+      nameAr: nameArRequired,
+
+      descriptionEn: descriptionEn.optional(),
+      descriptionAr: descriptionAr.optional(),
+      image: image.optional(),
+      isActive: isActive.optional(),
+    })
+      .options(joiOptions)
+      .unknown(false),
   },
 
   /* -----------------------------
     LIST
   ----------------------------- */
   listCategoriesValidation: {
-    params: Joi.object({}).unknown(true),
-    body: Joi.object({}).unknown(true),
+    params: Joi.object({}).options(joiOptions).unknown(true),
+    body: Joi.object({}).options(joiOptions).unknown(true),
+
     query: Joi.object({
       store: objectId.optional(),
       storeId: storeId9.optional(),
@@ -119,51 +156,58 @@ module.exports = {
       page: Joi.number().integer().min(1).optional(),
       limit: Joi.number().integer().min(1).max(200).optional(),
 
-      // your helpers support any of these
-      search: Joi.string().allow("").optional(),
-      q: Joi.string().allow("").optional(),
-      keyword: Joi.string().allow("").optional(),
+      search: Joi.string().trim().allow("").optional(),
+      q: Joi.string().trim().allow("").optional(),
+      keyword: Joi.string().trim().allow("").optional(),
 
-      sort: Joi.string().allow("").optional(),
+      sort: Joi.string().trim().allow("").optional(),
       populateStore: boolQuery.optional(),
-    }).unknown(true),
+    })
+      .options(joiOptions)
+      .unknown(true),
   },
 
   /* -----------------------------
     PARAMS
   ----------------------------- */
   categoryIdParamsValidation: {
-    body: Joi.object({}).unknown(true),
-    query: Joi.object({}).unknown(true),
+    body: Joi.object({}).options(joiOptions).unknown(true),
+    query: Joi.object({}).options(joiOptions).unknown(true),
     params: categoryIdParams,
   },
 
   /* -----------------------------
     UPDATE
-    body: any of fields (min 1)
+    body: any field (min 1)
+    - names are optional, but if sent they must be non-empty
   ----------------------------- */
   updateCategoryValidation: {
-    query: Joi.object({}).unknown(true),
+    query: Joi.object({}).options(joiOptions).unknown(true),
     params: categoryIdParams,
+
     body: Joi.object({
       store: objectId.optional(),
-      storeId: storeId9.optional(),
 
-      nameEn: nameEn.optional(),
-      nameAr: nameAr.optional(),
+      nameEn: nameEnOptional,
+      nameAr: nameArOptional,
+
       descriptionEn: descriptionEn.optional(),
       descriptionAr: descriptionAr.optional(),
+      image: image.optional(),
+      isActive: isActive.optional(),
     })
       .min(1)
-      .messages({ "object.min": "errors.emptyBody" }),
+      .messages({ "object.min": "errors.emptyBody" })
+      .options(joiOptions)
+      .unknown(false),
   },
 
   /* -----------------------------
     DELETE
   ----------------------------- */
   deleteCategoryValidation: {
-    body: Joi.object({}).unknown(true),
-    query: Joi.object({}).unknown(true),
+    body: Joi.object({}).options(joiOptions).unknown(true),
+    query: Joi.object({}).options(joiOptions).unknown(true),
     params: categoryIdParams,
   },
 
@@ -173,14 +217,14 @@ module.exports = {
     PUT /categories/image/remove?categoryId=...
   ----------------------------- */
   uploadCategoryImageValidation: {
-    params: Joi.object({}).unknown(true),
-    body: Joi.object({}).unknown(true), // IMPORTANT so your helper doesn't crash
+    params: Joi.object({}).options(joiOptions).unknown(true),
+    body: Joi.object({}).options(joiOptions).unknown(true),
     query: categoryIdQuery,
   },
 
   removeCategoryImageValidation: {
-    params: Joi.object({}).unknown(true),
-    body: Joi.object({}).unknown(true), // IMPORTANT so your helper doesn't crash
+    params: Joi.object({}).options(joiOptions).unknown(true),
+    body: Joi.object({}).options(joiOptions).unknown(true),
     query: categoryIdQuery,
   },
 };

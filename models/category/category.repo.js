@@ -120,8 +120,6 @@ exports.createCategory = async (categoryData = {}) => {
     nameAr,
     descriptionEn,
     descriptionAr,
-    // image default "" (schema)
-    // isActive default true (schema)
   });
 
   return { success: true, code: 201, result: doc };
@@ -160,11 +158,6 @@ exports.listCategories = async (
     }
 
     normalizedFilter.store = resolved;
-  }
-
-  // default: only active (unless user explicitly passes isActive)
-  if (normalizedFilter?.isActive === undefined) {
-    normalizedFilter.isActive = true;
   }
 
   const finalFilter = applySearchFilter(normalizedFilter, [
@@ -246,32 +239,42 @@ exports.updateCategory = async (categoryId, payload = {}) => {
   return { success: true, code: 200, result: doc };
 };
 
-exports.deleteCategory = async (_id, deletePermanently = false) => {
-  if (!_id) return { success: false, code: 400, message: "invalid id" };
 
-  if (deletePermanently) {
+
+exports.deleteCategory = async (_id, permanent = false) => {
+
+  // ✅ only true triggers permanent delete
+  if (permanent) {
     const deleted = await categoryModel.findByIdAndDelete(_id).lean();
-    if (!deleted) return { success: false, code: 404, message: "Category not found" };
+    if (!deleted) {
+      return { success: false, code: 404, message: "errors.category_not_found" };
+    }
 
-    // remove images folder for this category (best effort)
+    // best effort remove images folder
     try {
       const categoryDir = path.join(PUBLIC_DIR, "images", "categories", String(_id));
-      if (fs.existsSync(categoryDir)) {
-        fs.rmSync(categoryDir, { recursive: true, force: true });
-      }
+      if (fs.existsSync(categoryDir)) fs.rmSync(categoryDir, { recursive: true, force: true });
     } catch (_) {}
 
-    return { success: true, code: 200, result: { message: "success.record_deleted" } };
+    return { success: true, code: 200, message: "success.record_deleted" };
   }
 
+  // ✅ default behavior: soft delete (disable)
   const updated = await categoryModel
     .findOneAndUpdate({ _id, isActive: true }, { isActive: false }, { new: true })
     .lean();
 
-  if (!updated) return { success: false, code: 404, message: "Category not found" };
+  if (!updated) {
+    const exists = await categoryModel.findById(_id).select({ _id: 1 }).lean();
+    if (!exists) return { success: false, code: 404, message: "errors.category_not_found" };
 
-  return { success: true, code: 200, result: { message: "success.record_disabled" } };
+    // already disabled
+    return { success: true, code: 200, message: "success.record_disabled" };
+  }
+
+  return { success: true, code: 200, message: "success.record_disabled" };
 };
+
 
 /* ---------------------------
   Image Upload (STRING) + Remove (separate endpoint)

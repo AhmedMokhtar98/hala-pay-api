@@ -12,11 +12,11 @@ const allowedUsers = ["client"]
 let checkToken = require("../../helpers/jwt.helper").verifyToken;
 
 app.use("/auth", authRoutes);
-app.use("/categories", categoriesRoutes);
-app.use("/stores", storesRoutes);
-app.use("/products", productsRoutes);
-app.use("/hero-ads", heroAdsRoutes);
-app.use("/email", emailRoutes);
+app.use("/categories", checkToken(allowedUsers), categoriesRoutes);
+app.use("/stores", checkToken(allowedUsers), storesRoutes);
+app.use("/products", checkToken(allowedUsers), productsRoutes);
+app.use("/hero-ads", checkToken(allowedUsers), heroAdsRoutes);
+app.use("/email", checkToken(allowedUsers), emailRoutes);
 app.use(checkToken(allowedUsers), clientRoutes);
 
 

@@ -104,7 +104,13 @@
     "invalidId": "Invalid id.",
     "requiredHeroSlideId": "Hero slide id is required.",
     "requiredImage": "Image file is required.",
-    "phone_not_found": "Phone number not found"
+    "phone_not_found": "Phone number not found",
+    "requiredStore": "Store is required.",
+    "requiredCategoryNameEn": "English name is required.",
+    "requiredCategoryNameAr": "Arabic name is required.",
+    "requiredCategoryId": "Category ID is required.",
+    "emptyBody": "At least one field is required.",
+    "category_not_found": "Category not found"
   },
   "success": {
     "record_updated": "Record updated successfully",

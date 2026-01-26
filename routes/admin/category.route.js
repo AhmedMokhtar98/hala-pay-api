@@ -2,7 +2,7 @@ const router = require("express").Router();
 const categoryController = require("../../controllers/admin/category.controller");
 const validator = require("../../helpers/validation.helper");
 const errorHandler = require("../../middlewares/errorHandler");
-const { uploadCategoryImageValidation, removeCategoryImageValidation } = require("../../validations/category.validation");
+const { uploadCategoryImageValidation, removeCategoryImageValidation, createCategoryValidation } = require("../../validations/category.validation");
 const { uploadImage } = require("../../multer/uploadImage");
 const categoryImageUpload = uploadImage({ module: "categories", idParam: "categoryId" });
 
@@ -10,7 +10,7 @@ const categoryImageUpload = uploadImage({ module: "categories", idParam: "catego
 // const { uploadCategoryImagesMulter } = require("../../multer/uploadImage");
 // router.post("/upload-images", uploadCategoryImagesMulter.array("images", 10), categoryController.uploadCategoryImages);
 
-router.post("/", errorHandler(categoryController.createCategory));
+router.post("/",  validator(createCategoryValidation), errorHandler(categoryController.createCategory));
 
 router.put( "/image", validator(uploadCategoryImageValidation), categoryImageUpload.single("image"), errorHandler(categoryController.uploadCategoryImage) );
 router.delete( "/image/remove", validator(removeCategoryImageValidation), errorHandler(categoryController.removeCategoryImage) );

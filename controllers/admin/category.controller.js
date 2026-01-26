@@ -44,10 +44,22 @@ exports.updateCategory = async (req, res) => {
 
 exports.deleteCategory = async (req, res) => {
   const { categoryId } = req.params;
-  const permanent = req.body.permanent;
-  const operationResultObject = await categoryRepo.deleteCategory(categoryId, permanent);
+
+  // ✅ permanent is TRUE only if it is explicitly true / "true" / 1 / "1"
+  const permanent =
+    req.body?.permanent === true ||
+    req.body?.permanent === "true" ||
+    req.body?.permanent === 1 ||
+    req.body?.permanent === "1";
+
+  const operationResultObject = await categoryRepo.deleteCategory(
+    categoryId,
+    permanent
+  );
+
   return res.status(operationResultObject.code).json(operationResultObject);
 };
+
 
 
 exports.uploadCategoryImage = async (req, res) => {

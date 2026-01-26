@@ -114,7 +114,13 @@
     "invalidId": "معرّف غير صالح.",
     "requiredHeroSlideId": "معرّف سلايد الهيرو مطلوب.",
     "requiredImage": "ملف الصورة مطلوب.",
-    "phone_not_found": "رقم الموبايل غير موجود"
+    "phone_not_found": "رقم الموبايل غير موجود",
+    "requiredStore": "المتجر مطلوب.",
+    "requiredCategoryNameEn": "الاسم باللغة الإنجليزية مطلوب.",
+    "requiredCategoryNameAr": "الاسم باللغة العربية مطلوب.",
+    "requiredCategoryId": "معرّف التصنيف مطلوب.",
+    "emptyBody": "يجب إرسال حقل واحد على الأقل.",
+    "category_not_found": "التصنيف غير موجود"
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",
