@@ -7,7 +7,7 @@ const {
 } = require("../../middlewares/errorHandler/exceptions");
 const applySearchFilter = require("../../helpers/applySearchFilter");
 const prepareQueryObjects = require("../../helpers/prepareQueryObjects");
-const { verifyLoginOTP } = require("../../redis/phoneOtp.redis");
+const { verifyPhoneOTP } = require("../../redis/phoneOtp.redis");
 const fs = require("fs");
 const path = require("path");
 const PUBLIC_DIR = path.join(process.cwd(), "public");
@@ -122,7 +122,7 @@ exports.update = async (_id, formObject) => {
 exports.updatePhoneNumber = async (_id, formObject) => {
   const { phoneCode, phoneNumber, otp } = formObject;
       // ✅ OTP verify
-    await verifyLoginOTP(phoneCode, phoneNumber, otp);
+    await verifyPhoneOTP(phoneCode, phoneNumber, otp);
 
     formObject = normalize(formObject);
     const existing = await clientModel.findById(_id);

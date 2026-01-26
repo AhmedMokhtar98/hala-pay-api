@@ -104,8 +104,17 @@
     "sendOtp_chooseEmailOrPhone": "من فضلك ابعت إما البريد الإلكتروني أو رقم الموبايل لإرسال رمز التحقق (OTP).",
     "requiredOtp": "رمز التحقق (OTP) مطلوب.",
     "verifyOtp_chooseEmailOrPhone": "من فضلك ابعت إما البريد الإلكتروني أو رقم الموبايل للتحقق من رمز التحقق (OTP).",
-    "account_removed": "تم حذف الحساب بنجاح."
-
+    "account_removed": "تم حذف الحساب بنجاح.",
+     "requiredTitle": "العنوان (بالإنجليزية) مطلوب.",
+    "invalidStartAt": "تاريخ البدء غير صالح.",
+    "invalidEndAt": "تاريخ الانتهاء غير صالح.",
+    "invalidDateRange": "يجب أن يكون تاريخ البدء قبل تاريخ الانتهاء.",
+    "heroSlideTitleExists": "يوجد سلايد هيرو بعنوان إنجليزي مطابق بالفعل.",
+    "heroSlideNotFound": "سلايد الهيرو غير موجود.",
+    "invalidId": "معرّف غير صالح.",
+    "requiredHeroSlideId": "معرّف سلايد الهيرو مطلوب.",
+    "requiredImage": "ملف الصورة مطلوب.",
+    "phone_not_found": "رقم الموبايل غير موجود"
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",
@@ -119,6 +128,9 @@
     "registered_successfully": "تم التسجيل بنجاح",
     "password_reset_otp_sent": "تم إرسال رمز التحقق (OTP) لإعادة تعيين كلمة المرور بنجاح إلى بريدك الإلكتروني",
     "password_reset_successful": "تم إعادة تعيين كلمة المرور بنجاح",
-    "token_refreshed": "تم تحديث الرمز بنجاح"
+    "token_refreshed": "تم تحديث الرمز بنجاح",
+    "record_disabled": "تم تعطيل السجل بنجاح.",
+    "hero_slide_image_updated": "تم تحديث صورة سلايد الهيرو بنجاح.",
+    "hero_slide_image_removed": "تم إزالة صورة سلايد الهيرو بنجاح."
    }
 }

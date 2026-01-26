@@ -4,7 +4,7 @@ const { ConflictException, UnauthorizedException, BadRequestException } = requir
 const bcrypt = require("bcrypt");
 const Client = require("./client.model");
 const jwtHelper = require("../../helpers/jwt.helper");
-const { sendOTP, verifyLoginOTP, sendEmailOTP, verifyEmailOTP } = require("../../redis/phoneOtp.redis");
+const { sendOTP, verifyPhoneOTP, sendEmailOTP, verifyEmailOTP } = require("../../redis/phoneOtp.redis");
 
 
 const SAFE_SELECT = { password: 0, __v: 0 };
@@ -57,7 +57,7 @@ exports.verifyOTP = async (phoneCode, phoneNumber, email, otp) => {
     };
   }
   else {
-    await verifyLoginOTP(phoneCode, phoneNumber, otp, true); // keepOtp = true
+    await verifyPhoneOTP(phoneCode, phoneNumber, otp, true); // keepOtp = true
     return {
       success: true,
       code: 200,
@@ -86,7 +86,7 @@ exports.register = async (payload = {}) => {
   }
 
   // ✅ OTP verify
-  await verifyLoginOTP(phoneCode, phoneNumber, otp);
+  await verifyPhoneOTP(phoneCode, phoneNumber, otp);
 
 
   // ✅ phone uniqueness
@@ -245,7 +245,7 @@ exports.login = async (payload = {}, type) => {
 
     // ✅ Verify OTP (implement this in your repo using Redis/DB)
     // Expected: { success: true } or throw UnauthorizedException("errors.otp_invalid")
-    await verifyLoginOTP( phoneCode, phoneNumber, otp );
+    await verifyPhoneOTP( phoneCode, phoneNumber, otp );
 
     // Optional: mark phone verified after successful OTP
     if (result.isPhoneVerified === false) {
@@ -292,11 +292,20 @@ exports.login = async (payload = {}, type) => {
 };
 
 
-exports.forgotPassword = async (email, locale) => {
-  email = normalizeEmail(email);
-  const client = await Client.findOne({ email });
-  if (!client)  { throw new ConflictException("errors.email_not_found");};
-  await sendEmailOTP(email, locale);
+exports.forgotPassword = async ( phoneCode, phoneNumber, email, locale) => {
+  if(email){
+    email = normalizeEmail(email);
+    const client = await Client.findOne({ email });
+    if (!client)  { throw new ConflictException("errors.email_not_found");};
+    await sendEmailOTP(email, locale);
+  }
+  else{
+    phoneCode = String(phoneCode || "").trim();
+    phoneNumber = String(phoneNumber || "").trim();
+    const client = await Client.findOne({ phoneCode, phoneNumber });
+    if (!client)  { throw new ConflictException("errors.phone_not_found");};
+    await sendOTP(phoneCode, phoneNumber);
+  }
   return {
     success: true,
     code: 200,
@@ -305,22 +314,40 @@ exports.forgotPassword = async (email, locale) => {
 };
 
 
-exports.resetPassword = async (email, otp, newPassword) => {
-  email = normalizeEmail(email);
-  const client = await Client.findOne({ email });
-  if (!client)  { throw new ConflictException("errors.email_not_found");};
+exports.resetPassword = async (phoneCode, phoneNumber, email, otp, newPassword) => {
+  otp = String(otp || "").trim();
+  newPassword = String(newPassword || "").trim();
 
-  // Verify OTP
-  await verifyEmailOTP(email, otp);
-  // Update password
+  if (!otp) throw new ConflictException("errors.requiredOtp");
+  if (!newPassword) throw new ConflictException("errors.requiredNewPassword");
+
+  if (email) {
+    email = normalizeEmail(email);
+
+    const client = await Client.findOne({ email });
+    if (!client) throw new ConflictException("errors.email_not_found");
+
+    await verifyEmailOTP(email, otp);
+
+    client.password = newPassword; // hashed by pre('save')
+    await client.save();
+
+    return { success: true, code: 200, message: "success.password_reset_successful" };
+  }
+
+  phoneCode = String(phoneCode || "").trim();
+  phoneNumber = String(phoneNumber || "").trim();
+
+  const client = await Client.findOne({ phoneCode, phoneNumber });
+  if (!client) throw new ConflictException("errors.phone_not_found");
+
+  await verifyPhoneOTP(phoneCode, phoneNumber, otp);
+
   client.password = newPassword; // hashed by pre('save')
   await client.save();
-  return {
-    success: true,
-    code: 200,
-    message: "success.password_reset_successful",
-  };
-}
+
+  return { success: true, code: 200, message: "success.password_reset_successful" };
+};
 
 
 exports.refreshToken = async (refreshToken) => {

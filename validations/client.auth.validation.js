@@ -546,62 +546,126 @@ verifyOtpValidation: {
   },
 
   
+// ✅ Forgot password (NO OTP)
+forgotPasswordValidation: {
+  body: Joi.object({
+    email: Joi.string()
+      .trim()
+      .email({ minDomainSegments: 2 })
+      .optional()
+      .messages({
+        "string.base": "errors.validEmail",
+        "string.email": "errors.validEmail",
+        "string.empty": "errors.emptyEmail",
+      }),
 
-  // ✅ Forgot password
-  forgotPasswordValidation: {
-    body: Joi.object({
-      email: Joi.string()
-        .trim()
-        .email({ minDomainSegments: 2 })
-        .required()
-        .messages({
-          "string.base": "errors.validEmail",
-          "string.email": "errors.validEmail",
-          "string.empty": "errors.emptyEmail",
-          "any.required": "errors.requiredEmail",
-        }),
-    }).options(joiOptions),
-  },
+    phoneCode: makePhoneCodeSchema({
+      required: false, // ✅ not always required
+      MIN_DIGITS: 1,
+      MAX_DIGITS: 4,
+      requiredKey: "errors.requiredPhoneCode",
+      emptyKey: "errors.emptyPhoneCode",
+      invalidKey: "errors.validPhoneCode",
+      minKey: "errors.phoneCodeTooShort",
+      maxKey: "errors.phoneCodeTooLong",
+    }),
 
-  // ✅ Reset password
-  resetPasswordValidation: {
-    body: Joi.object({
-      email: Joi.string()
-        .trim()
-        .email({ minDomainSegments: 2 })
-        .required()
-        .messages({
-          "string.base": "errors.validEmail",
-          "string.email": "errors.validEmail",
-          "string.empty": "errors.emptyEmail",
-          "any.required": "errors.requiredEmail",
-        }),
+    phoneNumber: makePhoneNumberSchema({
+      required: false, // ✅ not always required
+      MIN_DIGITS: 7,
+      MAX_DIGITS: 15,
+      requiredKey: "errors.requiredPhoneNumber",
+      emptyKey: "errors.emptyPhoneNumber",
+      invalidKey: "errors.validPhoneNumber",
+      minKey: "errors.phoneNumberTooShort",
+      maxKey: "errors.phoneNumberTooLong",
+    }),
+  })
+    // ✅ Either email OR phone (not both)
+    .xor("email", "phoneCode")
+    // ✅ if phoneCode/phoneNumber used, they must come together
+    .with("phoneCode", "phoneNumber")
+    .with("phoneNumber", "phoneCode")
+    .messages({
+      "object.xor": "errors.verifyOtp_chooseEmailOrPhone",
+      "object.with": "errors.phoneBothRequired",
+      "object.unknown": "errors.fieldNotAllowed",
+    })
+    .options(joiOptions)
+    .unknown(false),
+},
+// ✅ Reset password (email OR phone)
+resetPasswordValidation: {
+  body: Joi.object({
+    email: Joi.string()
+      .trim()
+      .email({ minDomainSegments: 2 })
+      .optional()
+      .messages({
+        "string.base": "errors.validEmail",
+        "string.email": "errors.validEmail",
+        "string.empty": "errors.emptyEmail",
+      }),
 
-      newPassword: Joi.string()
-        .trim()
-        .min(6)
-        .required()
-        .messages({
-          "string.base": "errors.validPassword",
-          "string.empty": "errors.emptyPassword",
-          "string.min": "errors.passwordTooShort",
-          "any.required": "errors.requiredPassword",
-        }),
+    phoneCode: makePhoneCodeSchema({
+      required: false,
+      MIN_DIGITS: 1,
+      MAX_DIGITS: 4,
+      requiredKey: "errors.requiredPhoneCode",
+      emptyKey: "errors.emptyPhoneCode",
+      invalidKey: "errors.validPhoneCode",
+      minKey: "errors.phoneCodeTooShort",
+      maxKey: "errors.phoneCodeTooLong",
+    }),
 
-      otp: Joi.string()
-        .trim()
-        .min(4) // change to 6 if your OTP is 6 digits
-        .max(8) // adjust if needed
-        .required()
-        .messages({
-          "string.base": "errors.validOtp",
-          "string.empty": "errors.emptyOtp",
-          "string.min": "errors.validOtp",
-          "string.max": "errors.validOtp",
-          "any.required": "errors.requiredOtp",
-        }),
-    }).options(joiOptions),
-  },
+    phoneNumber: makePhoneNumberSchema({
+      required: false,
+      MIN_DIGITS: 7,
+      MAX_DIGITS: 15,
+      requiredKey: "errors.requiredPhoneNumber",
+      emptyKey: "errors.emptyPhoneNumber",
+      invalidKey: "errors.validPhoneNumber",
+      minKey: "errors.phoneNumberTooShort",
+      maxKey: "errors.phoneNumberTooLong",
+    }),
+
+    newPassword: Joi.string()
+      .trim()
+      .min(6)
+      .required()
+      .messages({
+        "string.base": "errors.validPassword",
+        "string.empty": "errors.emptyPassword",
+        "string.min": "errors.passwordTooShort",
+        "any.required": "errors.requiredPassword",
+      }),
+
+    otp: Joi.string()
+      .trim()
+      .min(4)
+      .max(8)
+      .required()
+      .messages({
+        "string.base": "errors.validOtp",
+        "string.empty": "errors.emptyOtp",
+        "string.min": "errors.validOtp",
+        "string.max": "errors.validOtp",
+        "any.required": "errors.requiredOtp",
+      }),
+  })
+    // ✅ Either email OR phone (not both)
+    .xor("email", "phoneCode")
+    // ✅ if phoneCode/phoneNumber used, they must come together
+    .with("phoneCode", "phoneNumber")
+    .with("phoneNumber", "phoneCode")
+    .messages({
+      "object.xor": "errors.verifyOtp_chooseEmailOrPhone",
+      "object.with": "errors.phoneBothRequired",
+      "object.unknown": "errors.fieldNotAllowed",
+    })
+    .options(joiOptions)
+    .unknown(false),
+},
 
   refreshTokenValidation: {
     body: Joi.object({

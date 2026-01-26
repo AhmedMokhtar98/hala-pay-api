@@ -112,6 +112,19 @@ exports.listProducts = async (
     }
     normalizedFilter.store = s._id;
   }
+  if (normalizedFilter?.categoryId) {
+    const s = await categoryModel
+      .findOne({ categoryId: String(normalizedFilter.categoryId) })
+      .select({ _id: 1 })
+      .lean();
+
+    delete normalizedFilter.categoryId;
+
+    if (!s?._id) {
+      return { success: true, code: 200, result: [], count: 0, page: pageNumber, limit: limitNumber };
+    }
+    normalizedFilter.category = s._id;
+  }
 
   if (normalizedFilter?.isActive !== undefined) {
     const v = String(normalizedFilter.isActive).toLowerCase();
@@ -257,7 +270,7 @@ exports.deleteProduct = async (_id, deletePermanently = false) => {
       } catch (_) {}
     }
 
-    return { success: true, code: 200, result: { message: "record_deleted" } };
+    return { success: true, code: 200, result: { message: "success.record_deleted" } };
   }
 
   const updated = await productModel
@@ -266,7 +279,7 @@ exports.deleteProduct = async (_id, deletePermanently = false) => {
 
   if (!updated) return { success: false, code: 404, message: "Product not found" };
 
-  return { success: true, code: 200, result: { message: "record_disabled" } };
+  return { success: true, code: 200, result: { message: "success.record_disabled" } };
 };
 
 /* ----------------------------- Images ----------------------------- */

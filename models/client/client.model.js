@@ -39,6 +39,7 @@ const clientSchema = new mongoose.Schema(
 
     // ✅ fix array schema (your old one was wrong)
     groups: [{ type: mongoose.Schema.Types.ObjectId, ref: "Group", default: [] }],
+    activeGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: "Group", default: [] }],
     friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "Client", default: [] }],
     fcmToken: [String],
 

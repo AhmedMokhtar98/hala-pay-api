@@ -73,7 +73,7 @@ exports.sendOTP = async (phoneCode, phoneNumber) => {
 /**
  * ✅ Verify OTP for PHONE (compares and consumes)
  */
-exports.verifyLoginOTP = async (phoneCode, phoneNumber, otp, keepOtp = false) => {
+exports.verifyPhoneOTP = async (phoneCode, phoneNumber, otp, keepOtp = false) => {
   const pc = normalize(phoneCode);
   const pn = normalize(phoneNumber);
   const code = normalize(otp);

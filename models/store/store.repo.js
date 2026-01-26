@@ -252,7 +252,7 @@ exports.deleteStore = async (_id, deletePermanently = false) => {
       }
     } catch (_) {}
 
-    return { success: true, code: 200, result: { message: "record_deleted" } };
+    return { success: true, code: 200, result: { message: "success.record_deleted" } };
   }
 
   const updated = await storeModel
@@ -261,5 +261,5 @@ exports.deleteStore = async (_id, deletePermanently = false) => {
 
   if (!updated) return { success: false, code: 404, message: "Store not found" };
 
-  return { success: true, code: 200, result: { message: "record_disabled" } };
+  return { success: true, code: 200, result: { message: "success.record_disabled" } };
 };

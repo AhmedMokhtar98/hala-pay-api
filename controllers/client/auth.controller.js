@@ -35,15 +35,15 @@ exports.login = async (req, res) => {
 
 
 exports.forgotPassword = async (req, res) => {
-  const { email } = req.body;
+  const {phoneCode, phoneNumber, email } = req?.body;
   const lang = req.headers['accept-language'];
-  const operationResultObject = await clientAuthRepo.forgotPassword(email, lang);
+  const operationResultObject = await clientAuthRepo.forgotPassword(phoneCode, phoneNumber, email, lang);
   return res.status(operationResultObject.code).json(operationResultObject);
 }
 
 exports.resetPassword = async (req, res) => {
-  const { email, otp, newPassword } = req.body;
-  const operationResultObject = await clientAuthRepo.resetPassword(email, otp, newPassword);
+  const {phoneCode, phoneNumber, email, otp, newPassword } = req.body;
+  const operationResultObject = await clientAuthRepo.resetPassword(phoneCode, phoneNumber, email, otp, newPassword);
   return res.status(operationResultObject.code).json(operationResultObject);
 }
 

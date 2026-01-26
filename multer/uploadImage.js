@@ -3,10 +3,10 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-const { BadRequestException, UnprocessableEntityException } = require("../middlewares/errorHandler/exceptions");
-
-// ✅ FIX: since this file is already inside /middlewares
-
+const {
+  BadRequestException,
+  UnprocessableEntityException,
+} = require("../middlewares/errorHandler/exceptions");
 
 /* ------------------------------ Helpers ------------------------------ */
 function safeSegment(v) {
@@ -34,20 +34,37 @@ function safeUnlink(p) {
 
 /**
  * Resolve id from:
- * - query[idParam]
- * - params[idParam]
- * - body[idParam]
+ * - query[idParam] OR query._id OR query.id
+ * - params[idParam] OR params._id OR params.id
+ * - body[idParam] OR body._id OR body.id
  * - user._id (if enabled)
+ *
+ * ✅ supports idParam as string OR array of strings
  */
 function resolveId(req, idParam, { allowFromUser = false } = {}) {
-  const fromQuery = req?.query?.[idParam];
-  if (fromQuery) return String(fromQuery);
+  const candidates = Array.isArray(idParam) ? idParam : [idParam];
 
-  const fromParams = req?.params?.[idParam];
-  if (fromParams) return String(fromParams);
+  // ✅ always allow common aliases (so ?_id= works even if idParam="id")
+  const keys = Array.from(
+    new Set([...candidates.filter(Boolean), "_id", "id"])
+  );
 
-  const fromBody = req?.body?.[idParam];
-  if (fromBody) return String(fromBody);
+  const pick = (obj) => {
+    for (const k of keys) {
+      const v = obj?.[k];
+      if (v !== undefined && v !== null && String(v).trim() !== "") return String(v);
+    }
+    return "";
+  };
+
+  const fromQuery = pick(req?.query);
+  if (fromQuery) return fromQuery;
+
+  const fromParams = pick(req?.params);
+  if (fromParams) return fromParams;
+
+  const fromBody = pick(req?.body);
+  if (fromBody) return fromBody;
 
   if (allowFromUser && req?.user?._id) return String(req.user._id);
 
@@ -55,21 +72,13 @@ function resolveId(req, idParam, { allowFromUser = false } = {}) {
 }
 
 /* ------------------------------ Multer Uploader ------------------------------ */
-/**
- * Dynamic uploader:
- * Saves to: public/images/<module>/<id>/
- *
- * Returns:
- *  - uploader.single(fieldName)
- *  - uploader.array(fieldName,maxCount)
- *
- * ✅ Converts MulterError + custom validation into your HttpExceptions
- * so your errorMiddleware translates them instead of 500.
- */
 function uploadImage(opts = {}) {
   const {
     module,
+
+    // ✅ now can be "id" OR "_id" OR ["id","_id","clientId"] etc.
     idParam = "id",
+
     allowIdFromUser = false,
     requireObjectId = false,
 
@@ -88,6 +97,7 @@ function uploadImage(opts = {}) {
       try {
         const mod = safeSegment(module);
 
+        // ✅ will accept ?_id=... OR ?id=... OR params/body too
         const rawId = resolveId(req, idParam, { allowFromUser: allowIdFromUser });
         const id = safeSegment(rawId);
 
@@ -96,10 +106,7 @@ function uploadImage(opts = {}) {
         }
 
         if (requireObjectId && !isValidObjectIdHex24(rawId)) {
-          return cb(
-            new UnprocessableEntityException("errors.validId"),
-            null
-          );
+          return cb(new UnprocessableEntityException("errors.validId"), null);
         }
 
         const dir = path.join(process.cwd(), baseDir, mod, id);
@@ -120,25 +127,16 @@ function uploadImage(opts = {}) {
   function fileFilter(req, file, cb) {
     try {
       if (!file?.mimetype) {
-        return cb(
-          new UnprocessableEntityException("errors.image_file_required"),
-          false
-        );
+        return cb(new UnprocessableEntityException("errors.image_file_required"), false);
       }
 
       if (!allowedMime.includes(file.mimetype)) {
-        return cb(
-          new UnprocessableEntityException("errors.invalidImageFormat"),
-          false
-        );
+        return cb(new UnprocessableEntityException("errors.invalidImageFormat"), false);
       }
 
       const ext = path.extname(file.originalname || "").toLowerCase();
       if (!allowedExt.includes(ext)) {
-        return cb(
-          new UnprocessableEntityException("errors.invalidImageFormat"),
-          false
-        );
+        return cb(new UnprocessableEntityException("errors.invalidImageFormat"), false);
       }
 
       cb(null, true);
@@ -156,20 +154,19 @@ function uploadImage(opts = {}) {
   function wrap(multerMw, { requireFile = true } = {}) {
     return (req, res, next) => {
       multerMw(req, res, (err) => {
-        // ✅ success
         if (!err) {
           if (requireFile && !req.file) {
             return next(
-              new UnprocessableEntityException([{ field: "image", message: "errors.image_file_required" }])
+              new UnprocessableEntityException([
+                { field: "image", message: "errors.image_file_required" },
+              ])
             );
           }
           return next();
         }
 
-        // ✅ Already HttpException
         if (err?.status && err?.messageKeyOrText) return next(err);
 
-        // ✅ Multer errors
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
@@ -179,17 +176,12 @@ function uploadImage(opts = {}) {
 
           if (err.code === "LIMIT_FILE_SIZE") {
             safeUnlink(req?.file?.path);
-            return next(
-              new UnprocessableEntityException("errors.imageTooLarge")
-            );
+            return next(new UnprocessableEntityException("errors.imageTooLarge"));
           }
 
-          return next(
-            new UnprocessableEntityException("errors.invalidImageUpload")
-          );
+          return next(new UnprocessableEntityException("errors.invalidImageUpload"));
         }
 
-        // unknown
         return next(err);
       });
     };
@@ -202,7 +194,6 @@ function uploadImage(opts = {}) {
   };
 }
 
-/* ------------------------------ Delete helper (stores example) ------------------------------ */
 function deleteOldStoreLogoIfExists({ storeId, oldUrl, newFileName }) {
   if (!oldUrl || typeof oldUrl !== "string") return;
 

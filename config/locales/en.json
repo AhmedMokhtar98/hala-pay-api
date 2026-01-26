@@ -94,7 +94,17 @@
     "sendOtp_chooseEmailOrPhone": "Please provide either email or phone number to send OTP.",
     "requiredOtp": "OTP is required.",
     "verifyOtp_chooseEmailOrPhone": "Please provide either email or phone number to verify OTP.",
-    "account_removed": "Account has been successfully removed."
+    "account_removed": "Account has been successfully removed.",
+     "requiredTitle": "Title (English) is required.",
+    "invalidStartAt": "Invalid start date.",
+    "invalidEndAt": "Invalid end date.",
+    "invalidDateRange": "Start date must be before end date.",
+    "heroSlideTitleExists": "A hero slide with the same English title already exists.",
+    "heroSlideNotFound": "Hero slide not found.",
+    "invalidId": "Invalid id.",
+    "requiredHeroSlideId": "Hero slide id is required.",
+    "requiredImage": "Image file is required.",
+    "phone_not_found": "Phone number not found"
   },
   "success": {
     "record_updated": "Record updated successfully",
@@ -108,6 +118,9 @@
     "registered_successfully": "Registered successfully",
     "password_reset_otp_sent": "Password reset OTP sent successfully to your email",
     "password_reset_successful": "Password has been reset successfully",
-    "token_refreshed": "Token refreshed successfully"
+    "token_refreshed": "Token refreshed successfully",
+    "record_disabled": "Record disabled successfully.",
+    "hero_slide_image_updated": "Hero slide image updated successfully.",
+    "hero_slide_image_removed": "Hero slide image removed successfully."
   }
 }
