@@ -4,14 +4,7 @@ const router = require("express").Router();
 const heroSlideController = require("../../controllers/admin/heroSlide.controller.js");
 const validator = require("../../helpers/validation.helper");
 const errorHandler = require("../../middlewares/errorHandler");
-
-const {
-  createHeroSlideValidation,
-  updateHeroSlideValidation,
-  uploadHeroSlideImageValidation,
-  removeHeroSlideImageValidation,
-} = require("../../validations/heroSlide.validation");
-
+const { createHeroSlideValidation, updateHeroSlideValidation, uploadHeroSlideImageValidation, removeHeroSlideImageValidation, } = require("../../validations/heroSlide.validation");
 const { uploadImage } = require("../../multer/uploadImage");
 
 // ✅ multer: save to /public/images/hero-slides/:slideId/
@@ -34,7 +27,7 @@ router.put( "/image", validator(uploadHeroSlideImageValidation), heroSlideImageU
 // ✅ Remove hero slide image
 // DELETE /image?slideId=<id>
 router.delete( "/image", validator(removeHeroSlideImageValidation), errorHandler(heroSlideController.removeHeroSlideImage) );
-router.put("/", validator(updateHeroSlideValidation), errorHandler(heroSlideController.updateHeroSlide));
+router.put("/:slideId", validator(updateHeroSlideValidation), errorHandler(heroSlideController.updateHeroSlide));
 
 router.get("/", errorHandler(heroSlideController.listHeroSlides));
 router.get("/:slideId", errorHandler(heroSlideController.getHeroSlide));

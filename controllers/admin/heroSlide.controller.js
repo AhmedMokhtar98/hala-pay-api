@@ -23,9 +23,9 @@ exports.getHeroSlide = async (req, res) => {
 };
 
 exports.updateHeroSlide = async (req, res) => {
-  const { _id } = req.query;
+  const { slideId } = req.params;
 
-  const operationResultObject = await heroSlideRepo.updateHeroSlide(_id, req.body);
+  const operationResultObject = await heroSlideRepo.updateHeroSlide(slideId, req.body);
   return res.status(operationResultObject.code).json(operationResultObject);
 };
 

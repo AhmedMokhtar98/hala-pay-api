@@ -1,11 +1,15 @@
-// validations/heroSlide.validation.js
 const Joi = require("joi");
+
+/* ------------------------------ Options ------------------------------ */
 
 const joiOptions = {
   abortEarly: false,
   allowUnknown: false,
   stripUnknown: false,
 };
+
+/* ------------------------------ ObjectId ------------------------------ */
+
 const objectId = Joi.string()
   .pattern(/^[0-9a-fA-F]{24}$/)
   .messages({
@@ -15,35 +19,50 @@ const objectId = Joi.string()
 
 /* ------------------------------ Helpers ------------------------------ */
 
-const makeLangSchema = ({
-  requiredEn = false,
-  requiredKeyEn = "errors.requiredEnglishTitle",
-  emptyKeyEn = "errors.emptyEnglishTitle",
-  baseKey = "errors.validLangObject",
-  validEnKey = "errors.validEnglishText",
-  validArKey = "errors.validArabicText",
-} = {}) => {
-  const enSchema = Joi.string().trim().messages({
-    "string.base": validEnKey,
-    "string.empty": emptyKeyEn,
-    "any.required": requiredKeyEn,
-  });
-
-  const arSchema = Joi.string().trim().allow("").messages({
-    "string.base": validArKey,
-  });
-
-  return Joi.object({
-    en: requiredEn ? enSchema.required() : enSchema.optional(),
-    ar: arSchema.optional(),
+// ✅ Required EN + AR (for TITLE)
+const makeRequiredLangSchema = ({
+  requiredKey = "errors.requiredTitle",
+  validKey = "errors.validTitle",
+  baseKey = "errors.validTitle",
+} = {}) =>
+  Joi.object({
+    en: Joi.string().trim().required().messages({
+      "string.base": validKey,
+      "string.empty": requiredKey,
+      "any.required": requiredKey,
+    }),
+    ar: Joi.string().trim().required().messages({
+      "string.base": validKey,
+      "string.empty": requiredKey,
+      "any.required": requiredKey,
+    }),
   })
+    .required()
     .messages({
       "object.base": baseKey,
     })
     .unknown(false);
-};
 
-// Date: allow null, ISO string, timestamp, or Date; invalid => custom key
+// ✅ Optional EN + AR (for SUBTITLE)
+const makeOptionalLangSchema = ({
+  validKey = "errors.validSubtitle",
+  baseKey = "errors.validSubtitle",
+} = {}) =>
+  Joi.object({
+    en: Joi.string().trim().allow("").messages({
+      "string.base": validKey,
+    }),
+    ar: Joi.string().trim().allow("").messages({
+      "string.base": validKey,
+    }),
+  })
+    .optional()
+    .messages({
+      "object.base": baseKey,
+    })
+    .unknown(false);
+
+// ✅ Date: allow null or date
 const makeNullableDateSchema = ({
   invalidKey = "errors.invalidDate",
 } = {}) =>
@@ -56,36 +75,35 @@ const makeNullableDateSchema = ({
 /* ------------------------------ Exports ------------------------------ */
 
 module.exports = {
-  // ✅ Create
+  /* ============================== CREATE ============================== */
+
   createHeroSlideValidation: {
     body: Joi.object({
-      title: makeLangSchema({
-        requiredEn: true,
-        requiredKeyEn: "errors.requiredTitle",
-        emptyKeyEn: "errors.requiredTitle",
-        validEnKey: "errors.validTitle",
-        validArKey: "errors.validTitle",
+      // ✅ title: EN + AR REQUIRED
+      title: makeRequiredLangSchema({
+        requiredKey: "errors.requiredTitle",
+        validKey: "errors.validTitle",
         baseKey: "errors.validTitle",
-      }).required(),
+      }),
 
-      subtitle: makeLangSchema({
-        requiredEn: false,
-        requiredKeyEn: "errors.validSubtitle",
-        emptyKeyEn: "errors.validSubtitle",
-        validEnKey: "errors.validSubtitle",
-        validArKey: "errors.validSubtitle",
+      // ✅ subtitle: EN + AR OPTIONAL
+      subtitle: makeOptionalLangSchema({
+        validKey: "errors.validSubtitle",
         baseKey: "errors.validSubtitle",
-      })
-        .optional()
-        .default({ en: "", ar: "" }),
+      }).default({ en: "", ar: "" }),
 
+      startAt: makeNullableDateSchema({
+        invalidKey: "errors.invalidStartAt",
+      }).optional(),
 
-      startAt: makeNullableDateSchema({ invalidKey: "errors.invalidStartAt" }).optional(),
-      endAt: makeNullableDateSchema({ invalidKey: "errors.invalidEndAt" }).optional(),
+      endAt: makeNullableDateSchema({
+        invalidKey: "errors.invalidEndAt",
+      }).optional(),
 
       isActive: Joi.boolean().optional().messages({
         "boolean.base": "errors.validIsActive",
       }),
+
       store: objectId.optional(),
 
       category: objectId.required().messages({
@@ -95,7 +113,7 @@ module.exports = {
       }),
     })
       .custom((obj, helpers) => {
-        // ✅ validate date range if both provided & not null
+        // ✅ validate date range if both provided
         if (obj.startAt && obj.endAt) {
           const s = new Date(obj.startAt);
           const e = new Date(obj.endAt);
@@ -112,90 +130,88 @@ module.exports = {
       .options(joiOptions),
   },
 
-  // ✅ Update (at least 1 field)
- updateHeroSlideValidation: {
-  query: Joi.object({
-    _id: objectId
-      .required()
-      .messages({ "any.required": "errors.requiredHeroSlideId" }),
-  }).options(joiOptions),
+  /* ============================== UPDATE ============================== */
 
-  body: Joi.object({
-    title: makeLangSchema({
-      requiredEn: false,
-      requiredKeyEn: "errors.requiredTitle",
-      emptyKeyEn: "errors.requiredTitle",
-      validEnKey: "errors.validTitle",
-      validArKey: "errors.validTitle",
-      baseKey: "errors.validTitle",
-    }).optional(),
+  updateHeroSlideValidation: {
+    params: Joi.object({
+      slideId: objectId.required().messages({
+        "any.required": "errors.requiredHeroSlideId",
+      }),
+    }).options(joiOptions),
 
-    subtitle: makeLangSchema({
-      requiredEn: false,
-      requiredKeyEn: "errors.validSubtitle",
-      emptyKeyEn: "errors.validSubtitle",
-      validEnKey: "errors.validSubtitle",
-      validArKey: "errors.validSubtitle",
-      baseKey: "errors.validSubtitle",
-    }).optional(),
+    body: Joi.object({
+      // ✅ title optional, BUT if sent → EN + AR REQUIRED
+      title: makeRequiredLangSchema({
+        requiredKey: "errors.requiredTitle",
+        validKey: "errors.validTitle",
+        baseKey: "errors.validTitle",
+      }).optional(),
 
-    startAt: makeNullableDateSchema({ invalidKey: "errors.invalidStartAt" }).optional(),
-    endAt: makeNullableDateSchema({ invalidKey: "errors.invalidEndAt" }).optional(),
+      // ✅ subtitle always optional
+      subtitle: makeOptionalLangSchema({
+        validKey: "errors.validSubtitle",
+        baseKey: "errors.validSubtitle",
+      }).optional(),
 
-    isActive: Joi.boolean()
-      .optional()
-      .messages({ "boolean.base": "errors.validIsActive" }),
-    store: objectId.optional(),
-    category: objectId.optional(),
-  })
-    .min(1) // ✅ at least one field in body
-    .custom((obj, helpers) => {
-      // ✅ only validate range if BOTH keys are present in request body
-      const hasStart = Object.prototype.hasOwnProperty.call(obj, "startAt");
-      const hasEnd = Object.prototype.hasOwnProperty.call(obj, "endAt");
+      startAt: makeNullableDateSchema({
+        invalidKey: "errors.invalidStartAt",
+      }).optional(),
 
-      if (!hasStart || !hasEnd) return obj;
+      endAt: makeNullableDateSchema({
+        invalidKey: "errors.invalidEndAt",
+      }).optional(),
 
-      // allow nulls
-      if (!obj.startAt || !obj.endAt) return obj;
+      isActive: Joi.boolean().optional().messages({
+        "boolean.base": "errors.validIsActive",
+      }),
 
-      const s = new Date(obj.startAt);
-      const e = new Date(obj.endAt);
-
-      if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return obj;
-
-      if (s > e) return helpers.error("any.invalid");
-
-      return obj;
-    }, "date range validation")
-    .messages({
-      "object.min": "errors.noFieldsToUpdate",
-      "any.invalid": "errors.invalidDateRange",
-      "object.unknown": "errors.fieldNotAllowed",
+      store: objectId.optional(),
+      category: objectId.optional(),
     })
-    .options(joiOptions),
-},
+      .min(1) // ✅ at least one field
+      .custom((obj, helpers) => {
+        const hasStart = Object.prototype.hasOwnProperty.call(obj, "startAt");
+        const hasEnd = Object.prototype.hasOwnProperty.call(obj, "endAt");
 
-    // ✅ upload image endpoint: PUT /hero-slides/image?_id=...
-    uploadHeroSlideImageValidation: {
-      params: Joi.object({}).unknown(true),
-      body: Joi.object({}).unknown(true), // IMPORTANT so your helper doesn't crash
-      query: Joi.object({
-        _id: objectId.required().messages({
-          "any.required": "errors.requiredHeroSlideId",
-        }),
+        if (!hasStart || !hasEnd) return obj;
+        if (!obj.startAt || !obj.endAt) return obj;
+
+        const s = new Date(obj.startAt);
+        const e = new Date(obj.endAt);
+
+        if (!Number.isNaN(s.getTime()) && !Number.isNaN(e.getTime()) && s > e) {
+          return helpers.error("any.invalid");
+        }
+
+        return obj;
+      }, "date range")
+      .messages({
+        "object.min": "errors.noFieldsToUpdate",
+        "any.invalid": "errors.invalidDateRange",
+        "object.unknown": "errors.fieldNotAllowed",
+      })
+      .options(joiOptions),
+  },
+
+  /* ============================== IMAGE ============================== */
+
+  uploadHeroSlideImageValidation: {
+    params: Joi.object({}).unknown(true),
+    body: Joi.object({}).unknown(true),
+    query: Joi.object({
+      _id: objectId.required().messages({
+        "any.required": "errors.requiredHeroSlideId",
       }),
-    },
-  
-    // ✅ remove image endpoint: PUT /hero-slides/image/remove?_id=...
-    removeHeroSlideImageValidation: {
-      params: Joi.object({}).unknown(true),
-      body: Joi.object({}).unknown(true), // IMPORTANT so your helper doesn't crash
-      query: Joi.object({
-        _id: objectId.required().messages({ "any.required": "errors.requiredHeroSlideId", }),
+    }),
+  },
+
+  removeHeroSlideImageValidation: {
+    params: Joi.object({}).unknown(true),
+    body: Joi.object({}).unknown(true),
+    query: Joi.object({
+      _id: objectId.required().messages({
+        "any.required": "errors.requiredHeroSlideId",
       }),
-    },
-
-
-
+    }),
+  },
 };

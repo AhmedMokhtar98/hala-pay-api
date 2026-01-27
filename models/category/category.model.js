@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const categorySchema = new mongoose.Schema(
   {
-    store: { type: mongoose.Schema.Types.ObjectId, ref: "stores", required: true, },
+    store: { type: mongoose.Schema.Types.ObjectId, ref: "stores", required: true, index: true, },
     nameEn: { type: String, default: "" },
     nameAr: { type: String, default: "" },
     descriptionEn: { type: String, default: "" },

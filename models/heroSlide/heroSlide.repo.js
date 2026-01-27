@@ -102,7 +102,7 @@ exports.listHeroSlides = async (filterObject = {}, selectionObject = {}, sortObj
     .find(finalFilter)
     .select(selectionObject)
     .populate("store", "businessName storeId logo")
-    .populate("category", "name description image isActive")
+    .populate("category", "nameEn nameAr descriptionEn descriptionAr image isActive")
     .sort(normalizedSort)
     .limit(limitNumber)
     .skip((pageNumber - 1) * limitNumber);
@@ -118,45 +118,25 @@ exports.listHeroSlides = async (filterObject = {}, selectionObject = {}, sortObj
 exports.getHeroSlide = async (slideId) => {
   const doc = await heroSlideModel.findById(slideId).lean();
   if (!doc) throw new NotFoundException("errors.heroSlideNotFound");
-
   return { success: true, code: 200, result: doc };
 };
 
-exports.updateHeroSlide = async (slideId, payload = {}) => {
-  const doc = await heroSlideModel.findById(slideId);
-  if (!doc) throw new NotFoundException("errors.heroSlideNotFound");
+exports.updateHeroSlide = async (slideId, body = {}) => {
+  const updated = await heroSlideModel.findByIdAndUpdate(
+    slideId,
+    body,          
+    { new: true } 
+  );
 
-  if (payload.title !== undefined) doc.title = normLangField(payload.title);
-  if (payload.subtitle !== undefined) doc.subtitle = normLangField(payload.subtitle);
-
-
-  if (payload.isActive !== undefined) doc.isActive = Boolean(payload.isActive);
-
-  const startAt = parseNullableDate(payload.startAt);
-  const endAt = parseNullableDate(payload.endAt);
-
-  if (startAt === "__INVALID_DATE__") throw new BadRequestException("errors.invalidStartAt");
-  if (endAt === "__INVALID_DATE__") throw new BadRequestException("errors.invalidEndAt");
-
-  if (startAt !== undefined) doc.startAt = startAt;
-  if (endAt !== undefined) doc.endAt = endAt;
-
-  if (!doc.title?.en) throw new BadRequestException("errors.requiredTitle");
-
-  if (doc.startAt && doc.endAt && doc.startAt > doc.endAt) {
-    throw new BadRequestException("errors.invalidDateRange");
+  if (!updated) {
+    throw new NotFoundException("errors.heroSlideNotFound");
   }
 
-  // Optional: avoid duplicate title.en
-  const existing = await heroSlideModel.findOne({
-    _id: { $ne: doc._id },
-    "title.en": { $regex: `^${escapeRegExp(doc.title.en)}$`, $options: "i" },
-  });
-
-  if (existing) throw new ConflictException("errors.heroSlideTitleExists");
-
-  await doc.save();
-  return { success: true, code: 200, result: doc };
+  return {
+    success: true,
+    code: 200,
+    result: updated,
+  };
 };
 
 exports.deleteHeroSlide = async (_id, deletePermanently = false) => {

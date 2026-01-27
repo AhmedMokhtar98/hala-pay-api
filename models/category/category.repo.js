@@ -4,7 +4,7 @@ const path = require("path");
 
 const applySearchFilter = require("../../helpers/applySearchFilter");
 const prepareQueryObjects = require("../../helpers/prepareQueryObjects");
-const { ConflictException } = require("../../middlewares/errorHandler/exceptions");
+const { ConflictException, NotFoundException } = require("../../middlewares/errorHandler/exceptions");
 
 const categoryModel = require("./category.model");
 const storeModel = require("../store/store.model");
@@ -124,12 +124,11 @@ exports.createCategory = async (categoryData = {}) => {
 
   return { success: true, code: 201, result: doc };
 };
-
 exports.listCategories = async (
   filterObject,
   selectionObject = {},
   sortObject = {},
-  options = { populateStore: true }
+  options = {}
 ) => {
   const {
     filterObject: normalizedFilter,
@@ -141,20 +140,12 @@ exports.listCategories = async (
     defaultSort: "-createdAt",
   });
 
-  // resolve storeId -> store ObjectId
   if (normalizedFilter?.storeId) {
     const resolved = await resolveStoreId({ storeId: normalizedFilter.storeId });
     delete normalizedFilter.storeId;
 
     if (!resolved) {
-      return {
-        success: true,
-        code: 200,
-        result: [],
-        count: 0,
-        page: pageNumber,
-        limit: limitNumber,
-      };
+      return { success: true, code: 200, result: [], count: 0, page: pageNumber, limit: limitNumber };
     }
 
     normalizedFilter.store = resolved;
@@ -167,16 +158,33 @@ exports.listCategories = async (
     "descriptionAr",
   ]);
 
+
+  const ensureStoreSelected = (sel = {}) => {
+    if (!sel || Object.keys(sel).length === 0) return sel;
+
+    const values = Object.values(sel).map((v) => Number(v));
+    const isIncludeMode = values.some((v) => v === 1);
+
+    if (isIncludeMode) return { ...sel, store: 1 };
+
+    if (Number(sel.store) === 0) {
+      const copy = { ...sel };
+      delete copy.store;
+      return copy;
+    }
+
+    return sel;
+  };
+
+  const safeSelection = ensureStoreSelected(selectionObject);
+
   let query = categoryModel
     .find(finalFilter)
-    .select(selectionObject)
+    .populate("store", "businessName storeId logo")
+    .select(safeSelection)
     .sort(normalizedSort)
     .limit(limitNumber)
     .skip((pageNumber - 1) * limitNumber);
-
-  if (options?.populateStore) {
-    query = query.populate("store", "businessName storeId logo");
-  }
 
   const [categories, count] = await Promise.all([
     query.lean(),
@@ -193,12 +201,11 @@ exports.listCategories = async (
   };
 };
 
-exports.getCategory = async (categoryId, options = { populateStore: true }) => {
-  let query = categoryModel.findById(categoryId);
 
-  if (options?.populateStore) {
+
+exports.getCategory = async (categoryId) => {
+  let query = categoryModel.findById(categoryId);
     query = query.populate("store", "businessName storeId logo");
-  }
 
   const doc = await query.lean();
   if (!doc) return { success: false, code: 404, message: "Category not found" };
@@ -206,38 +213,27 @@ exports.getCategory = async (categoryId, options = { populateStore: true }) => {
   return { success: true, code: 200, result: doc };
 };
 
-exports.updateCategory = async (categoryId, payload = {}) => {
-  const doc = await categoryModel.findById(categoryId);
-  if (!doc) return { success: false, code: 404, message: "Category not found" };
 
-  // update store (optional)
-  if (payload?.store || payload?.storeId) {
-    const resolved = await resolveStoreId({
-      store: payload.store,
-      storeId: payload.storeId,
-    });
-    if (!resolved) return { success: false, code: 404, message: "Store not found" };
-    doc.store = resolved;
+
+
+exports.updateCategory = async (categoryId, body = {}) => {
+  const updated = await categoryModel.findByIdAndUpdate(
+    categoryId,
+    body,              
+    { new: true }
+  );
+
+  if (!updated) {
+    throw new NotFoundException("errors.category_not_found");
   }
 
-  // update fields (optional)
-  if (payload?.nameEn !== undefined) doc.nameEn = normStr(payload.nameEn);
-  if (payload?.nameAr !== undefined) doc.nameAr = normStr(payload.nameAr);
-  if (payload?.descriptionEn !== undefined)
-    doc.descriptionEn = normStr(payload.descriptionEn);
-  if (payload?.descriptionAr !== undefined)
-    doc.descriptionAr = normStr(payload.descriptionAr);
-
-  await ensureUniqueNamesPerStore({
-    store: doc.store,
-    nameEn: normStr(doc.nameEn),
-    nameAr: normStr(doc.nameAr),
-    excludeId: doc._id,
-  });
-
-  await doc.save();
-  return { success: true, code: 200, result: doc };
+  return {
+    success: true,
+    code: 200,
+    result: updated,
+  };
 };
+
 
 
 
