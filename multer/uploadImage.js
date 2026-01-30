@@ -10,7 +10,9 @@ const {
 
 /* ------------------------------ Helpers ------------------------------ */
 function safeSegment(v) {
-  return String(v || "").trim().replace(/[^a-zA-Z0-9_-]/g, "");
+  return String(v || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "");
 }
 
 function randomFileName(bytes = 18) {
@@ -32,6 +34,27 @@ function safeUnlink(p) {
   } catch (_) {}
 }
 
+function safeUnlinkMany(files) {
+  if (!files) return;
+
+  // single file object
+  if (files?.path) return safeUnlink(files.path);
+
+  // array of files
+  if (Array.isArray(files)) {
+    for (const f of files) safeUnlink(f?.path);
+    return;
+  }
+
+  // fields object: { fieldName: [files...] }
+  if (typeof files === "object") {
+    for (const k of Object.keys(files)) {
+      const arr = files[k];
+      if (Array.isArray(arr)) for (const f of arr) safeUnlink(f?.path);
+    }
+  }
+}
+
 /**
  * Resolve id from:
  * - query[idParam] OR query._id OR query.id
@@ -45,9 +68,7 @@ function resolveId(req, idParam, { allowFromUser = false } = {}) {
   const candidates = Array.isArray(idParam) ? idParam : [idParam];
 
   // ✅ always allow common aliases (so ?_id= works even if idParam="id")
-  const keys = Array.from(
-    new Set([...candidates.filter(Boolean), "_id", "id"])
-  );
+  const keys = Array.from(new Set([...candidates.filter(Boolean), "_id", "id"]));
 
   const pick = (obj) => {
     for (const k of keys) {
@@ -75,10 +96,7 @@ function resolveId(req, idParam, { allowFromUser = false } = {}) {
 function uploadImage(opts = {}) {
   const {
     module,
-
-    // ✅ now can be "id" OR "_id" OR ["id","_id","clientId"] etc.
     idParam = "id",
-
     allowIdFromUser = false,
     requireObjectId = false,
 
@@ -97,7 +115,6 @@ function uploadImage(opts = {}) {
       try {
         const mod = safeSegment(module);
 
-        // ✅ will accept ?_id=... OR ?id=... OR params/body too
         const rawId = resolveId(req, idParam, { allowFromUser: allowIdFromUser });
         const id = safeSegment(rawId);
 
@@ -151,36 +168,91 @@ function uploadImage(opts = {}) {
     limits: { fileSize: maxSizeMB * 1024 * 1024 },
   });
 
-  function wrap(multerMw, { requireFile = true } = {}) {
+  /**
+   * ✅ wrap supports:
+   * - single: req.file
+   * - array: req.files (array)
+   * - fields: req.files[fieldName] (array per field)
+   */
+  function wrap(multerMw, { requireFile = true, mode = "single", fieldName = "image" } = {}) {
     return (req, res, next) => {
       multerMw(req, res, (err) => {
+        // success
         if (!err) {
-          if (requireFile && !req.file) {
-            return next(
-              new UnprocessableEntityException([
-                { field: "image", message: "errors.image_file_required" },
-              ])
-            );
+          if (requireFile) {
+            if (mode === "single") {
+              if (!req.file) {
+                return next(
+                  new UnprocessableEntityException([
+                    { field: fieldName, message: "errors.image_file_required" },
+                  ])
+                );
+              }
+            }
+
+            if (mode === "array") {
+              if (!Array.isArray(req.files) || req.files.length === 0) {
+                return next(
+                  new UnprocessableEntityException([
+                    { field: fieldName, message: "errors.image_file_required" },
+                  ])
+                );
+              }
+            }
+
+            if (mode === "fields") {
+              const bucket = req.files?.[fieldName];
+              if (!Array.isArray(bucket) || bucket.length === 0) {
+                return next(
+                  new UnprocessableEntityException([
+                    { field: fieldName, message: "errors.image_file_required" },
+                  ])
+                );
+              }
+            }
           }
+
           return next();
         }
 
-        if (err?.status && err?.messageKeyOrText) return next(err);
+        // your custom exceptions
+        if (err?.status && err?.messageKeyOrText) {
+          // best-effort cleanup
+          safeUnlinkMany(req?.file);
+          safeUnlinkMany(req?.files);
+          return next(err);
+        }
 
+        // multer errors
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
+            // cleanup
+            safeUnlinkMany(req?.file);
+            safeUnlinkMany(req?.files);
+
             return next(
               new UnprocessableEntityException("errors.image_field_name_must_be_image")
             );
           }
 
           if (err.code === "LIMIT_FILE_SIZE") {
-            safeUnlink(req?.file?.path);
+            // cleanup all uploaded files (single/array/fields)
+            safeUnlinkMany(req?.file);
+            safeUnlinkMany(req?.files);
+
             return next(new UnprocessableEntityException("errors.imageTooLarge"));
           }
 
+          // cleanup
+          safeUnlinkMany(req?.file);
+          safeUnlinkMany(req?.files);
+
           return next(new UnprocessableEntityException("errors.invalidImageUpload"));
         }
+
+        // unknown error: cleanup
+        safeUnlinkMany(req?.file);
+        safeUnlinkMany(req?.files);
 
         return next(err);
       });
@@ -189,8 +261,23 @@ function uploadImage(opts = {}) {
 
   return {
     _multer: m,
-    single: (fieldName = "image") => wrap(m.single(fieldName), { requireFile: true }),
-    array: (fieldName = "image", maxCount = 1) => wrap(m.array(fieldName, maxCount), { requireFile: true }),
+
+    // ✅ single file: field "image"
+    single: (fieldName = "image") =>
+      wrap(m.single(fieldName), { requireFile: true, mode: "single", fieldName }),
+
+    // ✅ multiple files under same field (e.g. "images")
+    array: (fieldName = "images", maxCount = 10) =>
+      wrap(m.array(fieldName, maxCount), { requireFile: true, mode: "array", fieldName }),
+
+    // ✅ multiple fields each may have multiple files
+    fields: (fieldsConfig = [{ name: "images", maxCount: 10 }]) =>
+      // NOTE: requireFile default true for first field in config
+      wrap(m.fields(fieldsConfig), {
+        requireFile: true,
+        mode: "fields",
+        fieldName: fieldsConfig?.[0]?.name || "images",
+      }),
   };
 }
 

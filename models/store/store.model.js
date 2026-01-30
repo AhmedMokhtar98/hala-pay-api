@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const storeSchema = new mongoose.Schema(
   {
     businessName: { type: String, default: "" },
+    provider: { type: String, default: null },
     // store identifier (from user info endpoint)
     storeId: { type: String, required: true, unique: true, index: true },
     // merchant/user info snapshot (optional but useful)
