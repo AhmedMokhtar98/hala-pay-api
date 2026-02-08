@@ -544,6 +544,18 @@ verifyOtpValidation: {
     .options(joiOptions)
     .unknown(false), // ✅ blocks extra fields (recommended)
   },
+// Logout validation (optional, if you want to validate FCM token on logout)
+  logoutValidation: {
+    body: Joi.object({
+      fcmToken: Joi
+          .string()
+          .required()
+          .messages({
+            "string.base": "errors.validFCMToken",
+            "string.empty": "errors.emptyFCMToken",
+    }),
+    }).options(joiOptions).unknown(false),
+  },
 
   
 // ✅ Forgot password (NO OTP)

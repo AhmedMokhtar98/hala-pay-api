@@ -82,7 +82,6 @@ exports.createProduct = async (productData) => {
 
   return { success: true, code: 201, result: doc };
 };
-
 exports.listProducts = async (
   filterObject,
   selectionObject = {},
@@ -99,6 +98,8 @@ exports.listProducts = async (
     defaultSort: "-createdAt",
   });
 
+  /* ---------------- storeId/categoryId mapping ---------------- */
+
   if (normalizedFilter?.storeId) {
     const s = await storeModel
       .findOne({ storeId: String(normalizedFilter.storeId) })
@@ -112,6 +113,7 @@ exports.listProducts = async (
     }
     normalizedFilter.store = s._id;
   }
+
   if (normalizedFilter?.categoryId) {
     const s = await categoryModel
       .findOne({ categoryId: String(normalizedFilter.categoryId) })
@@ -131,21 +133,63 @@ exports.listProducts = async (
     normalizedFilter.isActive = v === "true" || v === "1";
   }
 
-  const minPrice = filterObject.minPrice !== undefined ? Number(filterObject.minPrice) : null;
-  const maxPrice = filterObject.maxPrice !== undefined ? Number(filterObject.maxPrice) : null;
-  if ((minPrice !== null && Number.isFinite(minPrice)) || (maxPrice !== null && Number.isFinite(maxPrice))) {
-    normalizedFilter.price = {};
-    if (minPrice !== null && Number.isFinite(minPrice)) normalizedFilter.price.$gte = minPrice;
-    if (maxPrice !== null && Number.isFinite(maxPrice)) normalizedFilter.price.$lte = maxPrice;
+  /* ---------------- helpers ---------------- */
+
+  const toNumberOrNull = (v) => {
+    if (v === undefined || v === null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  /* ---------------- price range ---------------- */
+
+  let minPrice = toNumberOrNull(normalizedFilter.minPrice ?? filterObject?.minPrice);
+  let maxPrice = toNumberOrNull(normalizedFilter.maxPrice ?? filterObject?.maxPrice);
+
+  delete normalizedFilter.minPrice;
+  delete normalizedFilter.maxPrice;
+
+  if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
+    [minPrice, maxPrice] = [maxPrice, minPrice];
   }
 
-  const minStock = filterObject.minStock !== undefined ? Number(filterObject.minStock) : null;
-  if (minStock !== null && Number.isFinite(minStock)) normalizedFilter.stock = { $gte: minStock };
+  if (minPrice !== null || maxPrice !== null) {
+    normalizedFilter.price = {};
+    if (minPrice !== null) normalizedFilter.price.$gte = minPrice;
+    if (maxPrice !== null) normalizedFilter.price.$lte = maxPrice;
+  }
 
-  const search = normalizeText(filterObject.search || filterObject.q || filterObject.keyword);
+  /* ---------------- minStock ---------------- */
+
+  const minStock = toNumberOrNull(normalizedFilter.minStock ?? filterObject?.minStock);
+  delete normalizedFilter.minStock;
+  if (minStock !== null) normalizedFilter.stock = { $gte: minStock };
+
+  /* ---------------- search ---------------- */
+
+  const search = normalizeText(
+    normalizedFilter.search || normalizedFilter.q || normalizedFilter.keyword
+  );
+  delete normalizedFilter.q;
+  delete normalizedFilter.keyword;
   if (search) normalizedFilter.search = search;
 
   const finalFilter = applySearchFilter(normalizedFilter, ["name", "description"]);
+
+  /* ---------------- price sorting (extra optional) ----------------
+     supports:
+     - sort=price or sort=-price (already via prepareQueryObjects)
+     - OR priceSort=asc|desc (optional param)
+  */
+
+  const priceSort = String(filterObject?.priceSort || normalizedFilter?.priceSort || "").toLowerCase();
+  delete normalizedFilter.priceSort;
+
+  // Only override if user explicitly sent priceSort
+  if (priceSort === "asc") normalizedSort.price = 1;
+  if (priceSort === "desc") normalizedSort.price = -1;
+
+  /* ---------------- query ---------------- */
 
   let q = productModel
     .find(finalFilter)
@@ -165,6 +209,7 @@ exports.listProducts = async (
 
   return { success: true, code: 200, result: products, count, page: pageNumber, limit: limitNumber };
 };
+
 
 exports.getProduct = async (productId) => {
   let q = productModel.findById(productId);

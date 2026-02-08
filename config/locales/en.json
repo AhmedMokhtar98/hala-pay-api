@@ -110,7 +110,51 @@
     "requiredCategoryNameAr": "Arabic name is required.",
     "requiredCategoryId": "Category ID is required.",
     "emptyBody": "At least one field is required.",
-    "category_not_found": "Category not found"
+    "category_not_found": "Category not found",
+    "invalidObjectId": "Invalid ObjectId format",
+    "store_not_found": "Store not found",
+    "product_not_found": "Product not found",
+     "validObjectId": "Invalid ID",
+
+    "validStoreId": "Invalid storeId",
+    "storeIdMustBe9Digits": "storeId must be exactly 9 digits",
+    "validBoolean": "Invalid boolean value",
+
+    "validNumber": "Invalid number",
+    "mustBeGteZero": "Value must be greater than or equal to 0",
+
+    "validGroupName": "Invalid group name",
+    "emptyGroupName": "Group name cannot be empty",
+    "requiredGroupName": "Group name is required",
+    "required_group_name": "Group name is required",
+
+    "validGroupDescription": "Invalid group description",
+    "validGroupImage": "Invalid group image",
+
+    "validGroupStatus": "Invalid group status",
+    "validDeadLine": "Invalid deadline date",
+
+    "requiredGroupId": "Group ID is required",
+    "required_group_id": "Group ID is required",
+    "invalid_group_id": "Invalid group ID",
+    "group_not_found": "Group not found",
+
+    "requiredStoreOrStoreId": "store or storeId is required",
+    "required_store_or_storeId": "store or storeId is required",
+    "invalid_store_id": "Invalid store ID",
+
+    "requiredProduct": "Product is required",
+    "required_product": "Product is required",
+    "invalid_product_id": "Invalid product ID",
+
+    "requiredTargetAmount": "Target amount is required",
+    "invalid_target_amount": "Target amount must be a valid number greater than or equal to 0",
+    "invalid_collected_amount": "Collected amount must be a valid number greater than or equal to 0",
+
+    "group_name_exists": "Group with this name already exists for this store",
+
+    "required_image": "Image file is required",
+    "requiredCreator": "Creator is required"
   },
   "success": {
     "record_updated": "Record updated successfully",
@@ -127,6 +171,8 @@
     "token_refreshed": "Token refreshed successfully",
     "record_disabled": "Record disabled successfully.",
     "hero_slide_image_updated": "Hero slide image updated successfully.",
-    "hero_slide_image_removed": "Hero slide image removed successfully."
+    "hero_slide_image_removed": "Hero slide image removed successfully.",
+    "image_updated": "Image updated successfully",
+    "image_removed": "Image removed successfully"
   }
 }

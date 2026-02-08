@@ -291,6 +291,23 @@ exports.login = async (payload = {}, type) => {
   throw new BadRequestException("errors.invalid_login_type");
 };
 
+exports.logout = async (_id, fcmToken) => {
+  if (!_id) throw new UnauthorizedException("errors.invalid_token");
+  const result = await Client.findById(_id);
+  if (!result) throw new UnauthorizedException("errors.user_not_found");
+  if (fcmToken) {
+    result.fcmToken = result.fcmToken.filter(token => token !== fcmToken);
+  } else {
+    throw new BadRequestException("errors.fcmToken_required_for_logout");
+  }
+  await result.save();
+  return {
+    success: true,
+    code: 200,
+    message: "success.logged_out",
+  };
+}
+
 
 exports.forgotPassword = async ( phoneCode, phoneNumber, email, locale) => {
   if(email){

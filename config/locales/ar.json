@@ -120,7 +120,51 @@
     "requiredCategoryNameAr": "الاسم باللغة العربية مطلوب.",
     "requiredCategoryId": "معرّف التصنيف مطلوب.",
     "emptyBody": "يجب إرسال حقل واحد على الأقل.",
-    "category_not_found": "التصنيف غير موجود"
+    "category_not_found": "التصنيف غير موجود",
+    "invalidObjectId": "تنسيق ObjectId غير صالح",
+    "store_not_found": "المتجر غير موجود",
+    "product_not_found": "المنتج غير موجود",
+    "validObjectId": "معرّف غير صالح",
+
+    "validStoreId": "storeId غير صالح",
+    "storeIdMustBe9Digits": "يجب أن يكون storeId مكوّن من 9 أرقام بالضبط",
+    "validBoolean": "قيمة منطقية غير صالحة",
+
+    "validNumber": "رقم غير صالح",
+    "mustBeGteZero": "يجب أن تكون القيمة أكبر من أو تساوي 0",
+
+    "validGroupName": "اسم المجموعة غير صالح",
+    "emptyGroupName": "اسم المجموعة لا يمكن أن يكون فارغًا",
+    "requiredGroupName": "اسم المجموعة مطلوب",
+    "required_group_name": "اسم المجموعة مطلوب",
+
+    "validGroupDescription": "وصف المجموعة غير صالح",
+    "validGroupImage": "صورة المجموعة غير صالحة",
+
+    "validGroupStatus": "حالة المجموعة غير صالحة",
+    "validDeadLine": "تاريخ الموعد النهائي غير صالح",
+
+    "requiredGroupId": "معرّف المجموعة مطلوب",
+    "required_group_id": "معرّف المجموعة مطلوب",
+    "invalid_group_id": "معرّف المجموعة غير صالح",
+    "group_not_found": "المجموعة غير موجودة",
+
+    "requiredStoreOrStoreId": "يجب إرسال store أو storeId",
+    "required_store_or_storeId": "يجب إرسال store أو storeId",
+    "invalid_store_id": "معرّف المتجر غير صالح",
+
+    "requiredProduct": "المنتج مطلوب",
+    "required_product": "المنتج مطلوب",
+    "invalid_product_id": "معرّف المنتج غير صالح",
+
+    "requiredTargetAmount": "المبلغ المستهدف مطلوب",
+    "invalid_target_amount": "يجب أن يكون المبلغ المستهدف رقمًا صحيحًا أكبر من أو يساوي 0",
+    "invalid_collected_amount": "يجب أن يكون المبلغ المُجمّع رقمًا صحيحًا أكبر من أو يساوي 0",
+
+    "group_name_exists": "يوجد بالفعل مجموعة بنفس الاسم داخل هذا المتجر",
+
+    "required_image": "ملف الصورة مطلوب",
+    "requiredCreator": "المُنشئ مطلوب"
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",
@@ -137,6 +181,8 @@
     "token_refreshed": "تم تحديث الرمز بنجاح",
     "record_disabled": "تم تعطيل السجل بنجاح.",
     "hero_slide_image_updated": "تم تحديث صورة سلايد الهيرو بنجاح.",
-    "hero_slide_image_removed": "تم إزالة صورة سلايد الهيرو بنجاح."
+    "hero_slide_image_removed": "تم إزالة صورة سلايد الهيرو بنجاح.",
+    "image_updated": "تم تحديث الصورة بنجاح",
+    "image_removed": "تم حذف الصورة بنجاح"
    }
 }

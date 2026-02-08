@@ -1,44 +1,98 @@
 // helpers/validation.helper.js
-module.exports = (schema) => {
+const Joi = require("joi");
+
+const DEFAULT_OPTIONS = {
+  abortEarly: false,  // collect all errors
+  allowUnknown: false // block unknown fields
+};
+
+// helper: validate one part and return { value, error }
+function validatePart(schemaPart, data) {
+  if (!schemaPart) return { value: data, error: null };
+
+  // schemaPart is expected to be a Joi schema (e.g. Joi.object(...))
+  return schemaPart.validate(data, DEFAULT_OPTIONS);
+}
+
+// helper: map joi details to your desired shape + translate via req.__
+function mapJoiErrorsToResponse(req, joiError) {
+  const details = joiError?.details || [];
+  return details.map((detail) => ({
+    field: Array.isArray(detail.path) && detail.path.length ? detail.path.join(".") : "body",
+    message:
+      typeof req.__ === "function"
+        ? req.__(detail.message) // detail.message is your key string
+        : detail.message,
+  }));
+}
+
+module.exports = (schema = {}) => {
   return (req, res, next) => {
     try {
-      const { error, value } = schema.body.validate(req.body, {
-        abortEarly: false,   // collect all errors
-        allowUnknown: false  // block unknown fields
-      });
-
-      if (!error) {
-        req.body = value; // sanitized body
-        return next();
+      // ✅ Validate params (if provided)
+      if (schema.params) {
+        const { error, value } = validatePart(schema.params, req.params);
+        if (error) {
+          const errors = mapJoiErrorsToResponse(req, error);
+          return res.status(422).json({
+            success: false,
+            message:
+              typeof req.__ === "function"
+                ? req.__("errors.validation_failed")
+                : "Validation failed",
+            code: 422,
+            errors,
+          });
+        }
+        req.params = value;
       }
 
-      // Map Joi errors → i18n messages using req.__
-      const errors = error.details.map((detail) => ({
-        field: detail.path.join("."),
-        message: typeof req.__ === "function" 
-          ? req.__(detail.message) // translate key using current locale
-          : detail.message // fallback
-      }));
+      // ✅ Validate query (if provided)
+      if (schema.query) {
+        const { error, value } = validatePart(schema.query, req.query);
+        if (error) {
+          const errors = mapJoiErrorsToResponse(req, error);
+          return res.status(422).json({
+            success: false,
+            message:
+              typeof req.__ === "function"
+                ? req.__("errors.validation_failed")
+                : "Validation failed",
+            code: 422,
+            errors,
+          });
+        }
+        req.query = value;
+      }
 
-      return res.status(422).json({
-        success: false,
-        message: typeof req.__ === "function" 
-          ? req.__("errors.validation_failed") 
-          : "Validation failed",
-        code: 422,
-        errors
-      });
+      // ✅ Validate body (if provided)
+      if (schema.body) {
+        const { error, value } = validatePart(schema.body, req.body);
+        if (error) {
+          const errors = mapJoiErrorsToResponse(req, error);
+          return res.status(422).json({
+            success: false,
+            message:
+              typeof req.__ === "function"
+                ? req.__("errors.validation_failed")
+                : "Validation failed",
+            code: 422,
+            errors,
+          });
+        }
+        req.body = value;
+      }
 
+      return next();
     } catch (err) {
       console.error("Joi Validation Error:", err);
 
       return res.status(400).json({
         success: false,
-        message: typeof req.__ === "function" 
-          ? req.__("errors.badRequest") 
-          : "Bad request",
+        message:
+          typeof req.__ === "function" ? req.__("errors.badRequest") : "Bad request",
         code: 400,
-        errors: null
+        errors: null,
       });
     }
   };

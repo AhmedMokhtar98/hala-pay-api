@@ -1,6 +1,6 @@
-// models/group/group.repo.js
-const fs = require("fs");
+// models/group/group.client.repo.js
 const path = require("path");
+const fs = require("fs");
 
 const applySearchFilter = require("../../helpers/applySearchFilter");
 const prepareQueryObjects = require("../../helpers/prepareQueryObjects");
@@ -8,6 +8,7 @@ const prepareQueryObjects = require("../../helpers/prepareQueryObjects");
 const {
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } = require("../../middlewares/errorHandler/exceptions");
 
 const groupModel = require("./group.model");
@@ -16,7 +17,7 @@ const productModel = require("../product/product.model"); // adjust if needed
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 
 /* ---------------------------
-  Utils
+  Helpers
 --------------------------- */
 
 function normStr(v) {
@@ -35,93 +36,121 @@ function safeUnlink(p) {
   } catch (_) {}
 }
 
-/**
- * Product must exist (return full doc so you can use price + store)
- * - no ObjectId validation here (handled in Joi)
- */
 async function resolveProductOrThrow(productId) {
   if (!productId) throw new BadRequestException("errors.required_product");
 
   const doc = await productModel.findById(productId).lean();
   if (!doc) throw new NotFoundException("errors.product_not_found");
 
-  // product must have store (we don't validate its format here)
-  if (!doc.store) {
-    throw new BadRequestException("errors.product_store_missing");
-  }
-
-  return doc; // { _id, price, store, ... }
+  if (!doc.store) throw new BadRequestException("errors.product_store_missing");
+  return doc;
 }
 
-/**
- * Always populate the same way (no options)
- */
 function populateGroupQuery(query) {
   return query
     .populate("store", "businessName storeId logo")
     .populate("product", "name title images image price")
-    .populate("creator", "firstName lastName phone email image")
-    .populate("contributors.client", "firstName lastName phone email image");
+    .populate("contributors.client", "firstName lastName phone email image")
+    .populate("creator", "firstName lastName phone email image");
+}
+
+function belongsFilter(clientId) {
+  return {
+    $or: [{ creator: clientId }, { "contributors.client": clientId }],
+  };
+}
+
+/**
+ * creator-only guard:
+ * - if group exists but not owned => 403
+ * - if not exists => 404
+ */
+async function assertCreatorOrThrow(clientId, groupId) {
+  if (!clientId) throw new BadRequestException("errors.unauthorized");
+
+  const owned = await groupModel
+    .findOne({ _id: groupId, creator: clientId })
+    .select({ _id: 1 })
+    .lean();
+
+  if (owned) return true;
+
+  const exists = await groupModel.findById(groupId).select({ _id: 1 }).lean();
+  if (exists) throw new ForbiddenException("errors.forbidden");
+
+  throw new NotFoundException("errors.group_not_found");
 }
 
 /* ---------------------------
-  CRUD
+  Client Repo API (used by controllers/client/group.controller.js)
 --------------------------- */
-exports.createGroup = async (groupData = {}) => {
-  const name = normStr(groupData.name);
+
+/**
+ * createGroup (client)
+ * - creator MUST come from auth (controller enforces)
+ * - also pushes creator into contributors if not already there
+ */
+exports.createGroup = async (payload = {}) => {
+  const creatorId = payload.creator;
+  if (!creatorId) throw new BadRequestException("errors.unauthorized");
+
+  const name = normStr(payload.name);
   if (!name) throw new BadRequestException("errors.required_group_name");
 
-  const product = await resolveProductOrThrow(groupData.product);
+  const product = await resolveProductOrThrow(payload.product);
 
   const price = normNum(product.price, NaN);
   if (!Number.isFinite(price) || price < 0) {
     throw new BadRequestException("errors.invalid_product_price");
   }
 
-  // ✅ build contributors list (push creator/client as first contributor)
-  const creatorClient = groupData.creator; // should be client ObjectId (validated by Joi)
-  const contributors = Array.isArray(groupData.contributors)
-    ? [...groupData.contributors]
+  const contributors = Array.isArray(payload.contributors)
+    ? [...payload.contributors]
     : [];
 
-  if (creatorClient) {
-    const alreadyAdded = contributors.some(
-      (c) => String(c?.client) === String(creatorClient)
-    );
+  const alreadyAdded = contributors.some(
+    (c) => String(c?.client) === String(creatorId)
+  );
 
-    if (!alreadyAdded) {
-      contributors.unshift({
-        client: creatorClient,
-        paidAmount: 0,
-        paidAt: null,
-        transactionStatus: false,
-      });
-    }
+  if (!alreadyAdded) {
+    contributors.unshift({
+      client: creatorId,
+      paidAmount: 0,
+      paidAt: null,
+      transactionStatus: false,
+    });
   }
 
   const created = await groupModel.create({
     name,
-    description: normStr(groupData.description),
-    image: normStr(groupData.image),
-    creator: creatorClient,
+    description: normStr(payload.description),
+    image: normStr(payload.image),
+
+    creator: creatorId,
 
     product: product._id,
-    store: String(product.store), // derived from product
-    targetAmount: price,          // derived from product price
+    store: String(product.store),
+    targetAmount: price,
     collectedAmount: 0,
 
-    contributors, // ✅ includes creator
+    contributors,
 
-    status: groupData.status || "active",
-    deadLine: groupData.deadLine || null,
-    isActive: groupData.isActive !== undefined ? !!groupData.isActive : true,
+    status: payload.status || "active",
+    deadLine: payload.deadLine || null,
+    isActive: payload.isActive !== undefined ? !!payload.isActive : true,
   });
 
   const doc = await populateGroupQuery(groupModel.findById(created._id)).lean();
   return { success: true, code: 201, result: doc };
 };
 
-exports.listGroups = async (filterObject, selectionObject = {}, sortObject = {}) => {
+/**
+ * listGroups (client)
+ * - returns only groups where client is creator OR contributor
+ */
+exports.listGroups = async (clientId, filterObject = {}, selectionObject = {}, sortObject = {}) => {
+  if (!clientId) throw new BadRequestException("errors.unauthorized");
+
   const {
     filterObject: normalizedFilter,
     sortObject: normalizedSort,
@@ -132,57 +161,10 @@ exports.listGroups = async (filterObject, selectionObject = {}, sortObject = {})
     defaultSort: "-createdAt",
   });
 
-  /* ---------------- targetAmount range (price from/to) ---------------- */
-
-  const toNumOrNull = (v) => {
-    if (v === undefined || v === null || v === "") return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
-
-  const minTargetAmount = toNumOrNull(
-    normalizedFilter.minPrice ??
-      normalizedFilter.from ??
-      normalizedFilter.minTargetAmount ??
-      normalizedFilter.minTarget ??
-      normalizedFilter.targetFrom
+  const finalFilter = applySearchFilter(
+    { ...normalizedFilter, ...belongsFilter(clientId) },
+    ["name", "description"]
   );
-
-  const maxTargetAmount = toNumOrNull(
-    normalizedFilter.maxPrice ??
-      normalizedFilter.to ??
-      normalizedFilter.maxTargetAmount ??
-      normalizedFilter.maxTarget ??
-      normalizedFilter.targetTo
-  );
-
-  // remove keys so they don't become normal mongo filters
-  [
-    "minPrice",
-    "maxPrice",
-    "from",
-    "to",
-    "minTargetAmount",
-    "maxTargetAmount",
-    "minTarget",
-    "maxTarget",
-    "targetFrom",
-    "targetTo",
-  ].forEach((k) => delete normalizedFilter[k]);
-
-  // apply range directly (targetAmount is Number in your response)
-  if (minTargetAmount !== null || maxTargetAmount !== null) {
-    normalizedFilter.targetAmount = {
-      ...(minTargetAmount !== null ? { $gte: minTargetAmount } : {}),
-      ...(maxTargetAmount !== null ? { $lte: maxTargetAmount } : {}),
-    };
-  }
-
-  /* ---------------- search over: name, description ---------------- */
-
-  const finalFilter = applySearchFilter(normalizedFilter, ["name", "description"]);
-
-  /* ---------------- selection safety ---------------- */
 
   const ensureStoreSelected = (sel = {}) => {
     if (!sel || Object.keys(sel).length === 0) return sel;
@@ -190,13 +172,11 @@ exports.listGroups = async (filterObject, selectionObject = {}, sortObject = {})
     const values = Object.values(sel).map((v) => Number(v));
     const isIncludeMode = values.some((v) => v === 1);
 
-    if (isIncludeMode) return { ...sel, store: 1, product: 1, contributors: 1 };
+    if (isIncludeMode) return { ...sel, store: 1, product: 1, contributors: 1, creator: 1 };
     return sel;
   };
 
   const safeSelection = ensureStoreSelected(selectionObject);
-
-  /* ---------------- query ---------------- */
 
   const query = populateGroupQuery(
     groupModel
@@ -212,36 +192,38 @@ exports.listGroups = async (filterObject, selectionObject = {}, sortObject = {})
     groupModel.countDocuments(finalFilter),
   ]);
 
-  return {
-    success: true,
-    code: 200,
-    result: groups,
-    count,
-    page: pageNumber,
-    limit: limitNumber,
-  };
+  return { success: true, code: 200, result: groups, count, page: pageNumber, limit: limitNumber };
 };
 
+/**
+ * getGroup (client)
+ * - must belong to client (creator OR contributor)
+ */
+exports.getGroup = async (clientId, groupId) => {
+  if (!clientId) throw new BadRequestException("errors.unauthorized");
 
-exports.getGroup = async (groupId) => {
-  const doc = await populateGroupQuery(groupModel.findById(groupId)).lean();
+  const doc = await populateGroupQuery(
+    groupModel.findOne({ _id: groupId, ...belongsFilter(clientId) })
+  ).lean();
+
   if (!doc) throw new NotFoundException("errors.group_not_found");
-
   return { success: true, code: 200, result: doc };
 };
 
-exports.updateGroup = async (groupId, body = {}) => {
-  const existing = await groupModel.findById(groupId).select({ _id: 1 }).lean();
-  if (!existing) throw new NotFoundException("errors.group_not_found");
+/**
+ * updateGroup (client)
+ * - creator ONLY
+ */
+exports.updateGroup = async (clientId, groupId, body = {}) => {
+  await assertCreatorOrThrow(clientId, groupId);
 
-  // normalize name if provided
   if (body?.name !== undefined) {
     const name = normStr(body.name);
     if (!name) throw new BadRequestException("errors.required_group_name");
     body.name = name;
   }
 
-  // if product changes => validate + sync store + sync targetAmount
+  // product change => sync store + targetAmount
   if (body?.product !== undefined) {
     const productDoc = await resolveProductOrThrow(body.product);
 
@@ -255,7 +237,7 @@ exports.updateGroup = async (groupId, body = {}) => {
     body.targetAmount = price;
   }
 
-  // validate numbers if provided
+  // validate optional numbers (if sent)
   if (body?.targetAmount !== undefined) {
     const targetAmount = normNum(body.targetAmount, NaN);
     if (!Number.isFinite(targetAmount) || targetAmount < 0) {
@@ -272,20 +254,35 @@ exports.updateGroup = async (groupId, body = {}) => {
     body.collectedAmount = collectedAmount;
   }
 
-  const updated = await groupModel.findByIdAndUpdate(groupId, body, { new: true });
+  const updated = await groupModel.findOneAndUpdate(
+    { _id: groupId, creator: clientId },
+    body,
+    { new: true }
+  );
+
   if (!updated) throw new NotFoundException("errors.group_not_found");
 
   const doc = await populateGroupQuery(groupModel.findById(updated._id)).lean();
   return { success: true, code: 200, result: doc };
 };
 
-exports.deleteGroup = async (_id, permanent = false) => {
+/**
+ * deleteGroup (client)
+ * - creator ONLY
+ */
+exports.deleteGroup = async (clientId, groupId, permanent = false) => {
+  await assertCreatorOrThrow(clientId, groupId);
+
   if (permanent) {
-    const deleted = await groupModel.findByIdAndDelete(_id).lean();
+    const deleted = await groupModel
+      .findOneAndDelete({ _id: groupId, creator: clientId })
+      .lean();
+
     if (!deleted) throw new NotFoundException("errors.group_not_found");
 
+    // best effort remove images folder
     try {
-      const groupDir = path.join(PUBLIC_DIR, "images", "groups", String(_id));
+      const groupDir = path.join(PUBLIC_DIR, "images", "groups", String(groupId));
       if (fs.existsSync(groupDir)) fs.rmSync(groupDir, { recursive: true, force: true });
     } catch (_) {}
 
@@ -293,11 +290,15 @@ exports.deleteGroup = async (_id, permanent = false) => {
   }
 
   const updated = await groupModel
-    .findOneAndUpdate({ _id, isActive: true }, { isActive: false }, { new: true })
+    .findOneAndUpdate(
+      { _id: groupId, creator: clientId, isActive: true },
+      { isActive: false },
+      { new: true }
+    )
     .lean();
 
   if (!updated) {
-    const exists = await groupModel.findById(_id).select({ _id: 1 }).lean();
+    const exists = await groupModel.findById(groupId).select({ _id: 1 }).lean();
     if (!exists) throw new NotFoundException("errors.group_not_found");
     return { success: true, code: 200, message: "success.record_disabled" };
   }
@@ -305,11 +306,13 @@ exports.deleteGroup = async (_id, permanent = false) => {
   return { success: true, code: 200, message: "success.record_disabled" };
 };
 
-/* ---------------------------
-  Image Upload (STRING) + Remove
---------------------------- */
+/**
+ * uploadGroupImage (client)
+ * - creator ONLY
+ */
+exports.uploadGroupImage = async (clientId, groupId, file) => {
+  await assertCreatorOrThrow(clientId, groupId);
 
-exports.uploadGroupImage = async (groupId, file) => {
   if (!groupId) {
     if (file?.path) safeUnlink(file.path);
     throw new BadRequestException("errors.required_group_id");
@@ -317,7 +320,7 @@ exports.uploadGroupImage = async (groupId, file) => {
 
   if (!file?.filename) throw new BadRequestException("errors.required_image");
 
-  const doc = await groupModel.findById(groupId);
+  const doc = await groupModel.findOne({ _id: groupId, creator: clientId });
   if (!doc) {
     if (file?.path) safeUnlink(file.path);
     throw new NotFoundException("errors.group_not_found");
@@ -331,13 +334,7 @@ exports.uploadGroupImage = async (groupId, file) => {
   if (oldUrl && typeof oldUrl === "string" && oldUrl.startsWith(prefix)) {
     const oldFileName = oldUrl.split("/").pop();
     if (oldFileName && oldFileName !== file.filename) {
-      const oldAbsPath = path.join(
-        PUBLIC_DIR,
-        "images",
-        "groups",
-        String(groupId),
-        oldFileName
-      );
+      const oldAbsPath = path.join(PUBLIC_DIR, "images", "groups", String(groupId), oldFileName);
       safeUnlink(oldAbsPath);
     }
   }
@@ -346,19 +343,19 @@ exports.uploadGroupImage = async (groupId, file) => {
   await doc.save();
 
   const populated = await populateGroupQuery(groupModel.findById(groupId)).lean();
-
-  return {
-    success: true,
-    code: 200,
-    message: "success.image_updated",
-    result: populated,
-  };
+  return { success: true, code: 200, message: "success.image_updated", result: populated };
 };
 
-exports.removeGroupImage = async (groupId) => {
+/**
+ * removeGroupImage (client)
+ * - creator ONLY
+ */
+exports.removeGroupImage = async (clientId, groupId) => {
+  await assertCreatorOrThrow(clientId, groupId);
+
   if (!groupId) throw new BadRequestException("errors.required_group_id");
 
-  const doc = await groupModel.findById(groupId);
+  const doc = await groupModel.findOne({ _id: groupId, creator: clientId });
   if (!doc) throw new NotFoundException("errors.group_not_found");
 
   const oldUrl = doc.image;
@@ -367,16 +364,11 @@ exports.removeGroupImage = async (groupId) => {
   if (oldUrl && typeof oldUrl === "string" && oldUrl.startsWith(prefix)) {
     const oldFileName = oldUrl.split("/").pop();
     if (oldFileName) {
-      const oldAbsPath = path.join(
-        PUBLIC_DIR,
-        "images",
-        "groups",
-        String(groupId),
-        oldFileName
-      );
+      const oldAbsPath = path.join(PUBLIC_DIR, "images", "groups", String(groupId), oldFileName);
       safeUnlink(oldAbsPath);
     }
 
+    // cleanup empty folder (best effort)
     try {
       const dir = path.join(PUBLIC_DIR, "images", "groups", String(groupId));
       if (fs.existsSync(dir)) {
@@ -390,11 +382,5 @@ exports.removeGroupImage = async (groupId) => {
   await doc.save();
 
   const populated = await populateGroupQuery(groupModel.findById(groupId)).lean();
-
-  return {
-    success: true,
-    code: 200,
-    message: "success.image_removed",
-    result: populated,
-  };
+  return { success: true, code: 200, message: "success.image_removed", result: populated };
 };

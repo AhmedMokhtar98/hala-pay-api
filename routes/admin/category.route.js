@@ -1,3 +1,4 @@
+// routes/admin/category.route.js
 const router = require("express").Router();
 const categoryController = require("../../controllers/admin/category.controller");
 const validator = require("../../helpers/validation.helper");

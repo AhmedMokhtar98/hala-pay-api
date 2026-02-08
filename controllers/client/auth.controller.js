@@ -33,6 +33,12 @@ exports.login = async (req, res) => {
   return res.status(operationResultObject.code).json(operationResultObject);
 };
 
+exports.logout = async (req, res) => {
+  const _id = req?.user?._id || null;
+  const fcmToken = req.body.fcmToken || null; // Optional: If you want to remove a specific FCM token on logout
+  const operationResultObject = await clientAuthRepo.logout(_id, fcmToken);
+  return res.status(operationResultObject.code).json(operationResultObject);
+}
 
 exports.forgotPassword = async (req, res) => {
   const {phoneCode, phoneNumber, email } = req?.body;

@@ -1,3 +1,4 @@
+// controllers/admin/category.controller.js
 const categoryRepo = require("../../models/category/category.repo");
 
 /* ---------------- controllers ---------------- */
