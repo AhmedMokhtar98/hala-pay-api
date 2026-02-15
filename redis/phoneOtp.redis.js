@@ -66,7 +66,7 @@ exports.sendOTP = async (phoneCode, phoneNumber) => {
     success: true,
     code: 200,
     message: "success.otp_sent",
-    result: { phoneCode: pc, phoneNumber: pn, otp }, // no otp in prod response
+    result: { phoneCode: pc, phoneNumber: pn, otp }, 
   };
 };
 
