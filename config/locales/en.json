@@ -154,7 +154,8 @@
     "group_name_exists": "Group with this name already exists for this store",
 
     "required_image": "Image file is required",
-    "requiredCreator": "Creator is required"
+    "requiredCreator": "Creator is required",
+    "invalid_or_expired_invite": "Invalid or expired group invite link"
   },
   "success": {
     "record_updated": "Record updated successfully",

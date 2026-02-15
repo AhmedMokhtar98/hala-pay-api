@@ -78,3 +78,27 @@ exports.removeGroupImage = async (req, res) => {
   const op = await groupRepo.removeGroupImage(clientId, groupId);
   return res.status(op.code).json(op);
 };
+
+
+
+/**
+  * GET /link?_id=xxxx
+ */
+exports.getGroupInviteLink = async (req, res) => {
+  const clientId = req.user?._id;
+  const groupId = req.query._id;
+
+  const op = await groupRepo.getGroupInviteLink(clientId, groupId);
+  return res.status(op.code).json(op);
+};
+
+/**
+ * POST /join?token=xxxx
+ */
+exports.joinGroupByToken = async (req, res) => {
+  const clientId = req.user?._id;
+  const token = req.query.token || req.body.token;
+
+  const op = await groupRepo.joinGroupByToken(clientId, token);
+  return res.status(op.code).json(op);
+};

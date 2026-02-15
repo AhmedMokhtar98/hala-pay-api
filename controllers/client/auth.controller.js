@@ -6,6 +6,7 @@ exports.emailCheck = async (req, res) => {
   const operationResultObject = await clientAuthRepo.emailCheck(email);
   return res.status(operationResultObject.code).json(operationResultObject);
 }
+
 exports.phoneCheck = async (req, res) => {
   const { phoneCode, phoneNumber } = req.body;
   const operationResultObject = await clientAuthRepo.phoneCheck(phoneCode, phoneNumber);

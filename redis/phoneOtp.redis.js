@@ -67,6 +67,7 @@ exports.sendOTP = async (phoneCode, phoneNumber) => {
     code: 200,
     message: "success.otp_sent",
     result: { phoneCode: pc, phoneNumber: pn }, // no otp in prod response
+    otp, // DEV ONLY: remove in production
   };
 };
 
@@ -135,6 +136,7 @@ exports.sendEmailOTP = async (email, lang) => {
     code: 200,
     message: "success.otp_sent",
     result: { email: em }, // no otp in prod response
+    otp, // DEV ONLY: remove in production
   };
 };
 

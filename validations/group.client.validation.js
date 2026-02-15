@@ -67,6 +67,18 @@ const isActive = Joi.boolean().messages({
 });
 
 /* -----------------------------
+  Invite Token
+----------------------------- */
+
+const inviteToken = Joi.string().trim().min(10).required().messages({
+  "string.base": "errors.validInviteToken",
+  "string.empty": "errors.requiredInviteToken",
+  "string.min": "errors.validInviteToken",
+  "any.required": "errors.requiredInviteToken",
+});
+
+
+/* -----------------------------
   Params / Query (MATCH ROUTES)
 ----------------------------- */
 
@@ -87,6 +99,34 @@ const groupIdQuery = Joi.object({
 })
   .options(joiOptions)
   .unknown(false);
+
+/* -----------------------------
+  Invite Link Query
+  GET /groups/link?_id=xxxx
+----------------------------- */
+
+const groupInviteLinkQuery = Joi.object({
+   _id: Joi.string().hex().length(24).required().messages({
+      "any.required": "Group ID is required",
+      "string.length": "Group ID is required",
+      "string.hex": "Group ID is required",
+  }),
+})
+  .options(joiOptions)
+  .unknown(false);
+
+/* -----------------------------
+  Join Group Token Query
+  POST /groups/join?token=xxxx
+----------------------------- */
+
+const joinGroupTokenQuery = Joi.object({
+  token: inviteToken,
+})
+  .options(joiOptions)
+  .unknown(false);
+
+
 
 /* -----------------------------
   Exports
@@ -195,4 +235,43 @@ module.exports = {
     body: Joi.object({}).options(joiOptions).unknown(true),
     query: groupIdQuery,
   },
+
+  /* -----------------------------
+    GET /groups/link?_id=xxxx
+  ----------------------------- */
+    /* -----------------------------
+    INVITE LINK
+    GET /groups/link?_id=xxxx
+    returns { link, token, exp }
+  ----------------------------- */
+  getGroupInviteLinkValidation: {
+    params: Joi.object({}).options(joiOptions).unknown(false),
+    body: Joi.object({}).options(joiOptions).unknown(false),
+    query: groupInviteLinkQuery,
+  },
+
+  /* -----------------------------
+    JOIN GROUP BY TOKEN
+    POST /groups/join?token=xxxx
+    or body.token
+  ----------------------------- */
+  joinGroupByTokenValidation: {
+    params: Joi.object({}).options(joiOptions).unknown(false),
+
+    // token ممكن ييجي من query
+    query: joinGroupTokenQuery,
+
+    // token ممكن ييجي من body
+    body: Joi.object({
+      token: inviteToken.optional(),
+    })
+      .options(joiOptions)
+      .unknown(false)
+      .messages({
+        "object.unknown": "errors.invalidBodyField",
+      }),
+  },
+
 };
+
+

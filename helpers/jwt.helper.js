@@ -4,6 +4,7 @@ const {
   UnauthorizedException,
   ForbiddenException,
   InternalServerErrorException,
+  BadRequestException,
 } = require("../middlewares/errorHandler/exceptions");
 
 /**
@@ -174,5 +175,90 @@ exports.generateDummyStoreToken = async (payloadObject) => {
     throw new InternalServerErrorException(
       "errors.token_generation_failed"
     );
+  }
+};
+
+
+/* ---------------------------
+  Group Invite Token (JWT)
+  - payload: { gid }
+  - exp: group.deadLine
+--------------------------- */
+
+const GROUP_INVITE_SECRET = process.env.GROUP_INVITE_JWT_SECRET;
+
+function toUnixSeconds(dateLike) {
+  const ms = new Date(dateLike).getTime();
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+}
+
+/**
+ * Generate Group Invite Token
+ * ✅ contains gid + exp(deadLine)
+ */
+exports.generateGroupInviteToken = ({ groupId, deadLine, extra = {} } = {}) => {
+  try {
+    if (!GROUP_INVITE_SECRET) {
+      throw new InternalServerErrorException("errors.missing_group_invite_secret");
+    }
+
+    if (!groupId) throw new BadRequestException("errors.required_group_id");
+
+    const exp = toUnixSeconds(deadLine);
+    if (!exp) throw new BadRequestException("errors.required_deadline");
+
+    const now = Math.floor(Date.now() / 1000);
+    if (exp <= now) throw new BadRequestException("errors.deadline_passed");
+
+    // (اختياري) تمنع meta fields لو حد بعت في extra بالخطأ
+    const cleanExtra = stripTokenMeta(extra);
+
+    const token = jwt.sign(
+      {
+        ...cleanExtra,
+        gid: String(groupId),
+        tid: uuidv4(),
+        type: "group_invite",
+        exp, // ✅ fixed absolute expiry = group.deadLine
+      },
+      GROUP_INVITE_SECRET,
+      {
+        algorithm: "HS256",
+        noTimestamp: true, // عشان ما يضيفش iat تلقائي
+      }
+    );
+
+    return { token, exp };
+  } catch (err) {
+    console.error("Group Invite Token generation failed:", err);
+    throw err instanceof Error
+      ? err
+      : new InternalServerErrorException("errors.token_generation_failed");
+  }
+};
+
+/**
+ * Verify Group Invite Token
+ * ✅ returns decoded payload (includes gid)
+ */
+exports.verifyGroupInviteToken = (token) => {
+  try {
+    if (!GROUP_INVITE_SECRET) {
+      throw new InternalServerErrorException("errors.missing_group_invite_secret");
+    }
+    if (!token) throw new BadRequestException("errors.required_token");
+
+    const decoded = jwt.verify(token, GROUP_INVITE_SECRET, {
+      algorithms: ["HS256"],
+    });
+
+    if (decoded?.type !== "group_invite" || !decoded?.gid) {
+      throw new ForbiddenException("errors.invalid_or_expired_invite");
+    }
+
+    return decoded; // { gid, exp, tid, type, ... }
+  } catch (err) {
+    console.error("Group Invite Token verify failed:", err);
+    throw new ForbiddenException("errors.invalid_or_expired_invite");
   }
 };

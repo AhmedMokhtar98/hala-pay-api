@@ -164,7 +164,8 @@
     "group_name_exists": "يوجد بالفعل مجموعة بنفس الاسم داخل هذا المتجر",
 
     "required_image": "ملف الصورة مطلوب",
-    "requiredCreator": "المُنشئ مطلوب"
+    "requiredCreator": "المُنشئ مطلوب",
+    "invalid_or_expired_invite": "رابط دعوة المجموعة غير صالح أو منتهي الصلاحية"
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",

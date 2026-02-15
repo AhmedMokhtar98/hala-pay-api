@@ -13,6 +13,7 @@ const {
 
 const groupModel = require("./group.model");
 const productModel = require("../product/product.model"); // adjust if needed
+const { generateGroupInviteToken, verifyGroupInviteToken } = require("../../helpers/jwt.helper");
 
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 
@@ -383,4 +384,124 @@ exports.removeGroupImage = async (clientId, groupId) => {
 
   const populated = await populateGroupQuery(groupModel.findById(groupId)).lean();
   return { success: true, code: 200, message: "success.image_removed", result: populated };
+};
+
+
+// ____________________________________________ G R O U P  I N V I T E  L I N K S ____________________________________________ //
+
+// __________ generate token with gid + exp = deadLine, signed with GROUP_INVITE_TOKEN_SECRET __________ //
+
+const GROUP_SHARE_WEB_BASE = process.env.GROUP_SHARE_WEB_BASE || "https://yallapay-app.hostwover.net";
+function buildJoinLink(token) {
+  const base = String(GROUP_SHARE_WEB_BASE || "").replace(/\/+$/, "");
+  const t = encodeURIComponent(String(token || ""));
+  return `${base}/g/join?token=${t}`;
+}
+
+// ______________________ G E N E R A T E  G R O U P  I N V I T A T I O N  L I N K _______________________//
+
+
+exports.getGroupInviteLink = async (clientId, groupId) => {
+  await assertCreatorOrThrow(clientId, groupId);
+
+  if (!groupId) throw new BadRequestException("errors.required_group_id");
+
+  const group = await groupModel
+    .findById(groupId)
+    .select({ _id: 1, deadLine: 1, isActive: 1, status: 1 })
+    .lean();
+
+  if (!group) throw new NotFoundException("errors.group_not_found");
+
+  if (group.isActive === false) throw new ForbiddenException("errors.group_inactive");
+  if (group.status && String(group.status) !== "active") {
+    throw new ForbiddenException("errors.group_inactive");
+  }
+
+  // لازم يكون فيه deadline عشان exp يساويه
+  if (!group.deadLine) throw new BadRequestException("errors.required_deadline");
+
+  // ✅ generate token contains gid + exp = deadLine
+  const { token, exp } = generateGroupInviteToken({
+    groupId: group._id,
+    deadLine: group.deadLine,
+  });
+
+  const link = buildJoinLink(token);
+
+  return {
+    success: true,
+    code: 200,
+    result: {
+      groupId: String(group._id),
+      token,
+      exp, // unix seconds
+      link,
+    },
+  };
+};
+
+// ____________________  J O I N  G R O U P  B Y  T O K E N __________________________ //
+
+
+exports.joinGroupByToken = async (clientId, token) => {
+  if (!clientId) throw new BadRequestException("errors.unauthorized");
+  if (!token) throw new BadRequestException("errors.required_token");
+
+  // ✅ verify token => gives { gid, exp, ... }
+  const decoded = verifyGroupInviteToken(token);
+  const groupId = decoded?.gid;
+  if (!groupId) throw new ForbiddenException("errors.invalid_or_expired_invite");
+
+  const group = await groupModel
+    .findById(groupId)
+    .select({ _id: 1, creator: 1, contributors: 1, status: 1, isActive: 1, deadLine: 1 })
+    .lean();
+
+  if (!group) throw new NotFoundException("errors.group_not_found");
+
+  if (group.isActive === false) throw new ForbiddenException("errors.group_inactive");
+  if (group.status && String(group.status) !== "active") {
+    throw new ForbiddenException("errors.group_inactive");
+  }
+
+  // ✅ enforce DB deadLine too (in case it changed after token issued)
+  if (!group.deadLine) throw new ForbiddenException("errors.required_deadline");
+  const dlMs = new Date(group.deadLine).getTime();
+  if (!Number.isFinite(dlMs)) throw new ForbiddenException("errors.required_deadline");
+  if (Date.now() > dlMs) throw new ForbiddenException("errors.group_deadline_passed");
+
+  // extra hardening: reject token if its exp > DB deadline
+  const dlSec = Math.floor(dlMs / 1000);
+  if (decoded.exp && dlSec && decoded.exp > dlSec) {
+    throw new ForbiddenException("errors.invalid_or_expired_invite");
+  }
+
+  const isCreator = String(group.creator) === String(clientId);
+  const alreadyContributor = Array.isArray(group.contributors)
+    ? group.contributors.some((c) => String(c?.client) === String(clientId))
+    : false;
+
+  if (isCreator || alreadyContributor) {
+    const doc = await populateGroupQuery(groupModel.findById(groupId)).lean();
+    return { success: true, code: 200, result: doc };
+  }
+
+  // ✅ push contributor safely (no duplicates)
+  await groupModel.updateOne(
+    { _id: groupId, "contributors.client": { $ne: clientId } },
+    {
+      $push: {
+        contributors: {
+          client: clientId,
+          paidAmount: 0,
+          paidAt: null,
+          transactionStatus: false,
+        },
+      },
+    }
+  );
+
+  const doc = await populateGroupQuery(groupModel.findById(groupId)).lean();
+  return { success: true, code: 200, result: doc };
 };
