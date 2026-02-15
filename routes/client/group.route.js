@@ -30,13 +30,13 @@ router.get("/link", validator(getGroupInviteLinkValidation), errorHandler(groupC
 router.post("/join", validator(joinGroupByTokenValidation), errorHandler(groupController.joinGroupByToken));
 
 
-router.put( "/:groupId", validator(updateGroupValidation), errorHandler(groupController.updateGroup) );
+router.put( "/:_id", validator(updateGroupValidation), errorHandler(groupController.updateGroup) );
 
 router.get( "/", errorHandler(groupController.listGroups) );
 
-router.get( "/:groupId", validator(groupIdParamsValidation), errorHandler(groupController.getGroupDetails) );
+router.get( "/:_id", validator(groupIdParamsValidation), errorHandler(groupController.getGroupDetails) );
 
-router.delete( "/:groupId", validator(deleteGroupValidation), errorHandler(groupController.deleteGroup) );
+router.delete( "/:_id", validator(deleteGroupValidation), errorHandler(groupController.deleteGroup) );
 
 
 
