@@ -4,7 +4,7 @@
 const otpGenerator = require("otp-generator");
 const { connectRedis } = require("../redis/redis.config");
 const { UnauthorizedException } = require("../middlewares/errorHandler/exceptions");
-const { sendWhatsAppOtp } = require("../helpers/sendWhatsAppMessage");
+// const { sendWhatsAppOtp } = require("../helpers/sendWhatsAppMessage");
 
 // ✅ Use your nodemailer/OAuth helper (the one we created)
 const { sendOTPPasswordResetEmailToClient } = require("../helpers/emailService.helper");
@@ -55,7 +55,7 @@ exports.sendOTP = async (phoneCode, phoneNumber) => {
   // await smsProvider.send({ to: `${pc}${pn}`, message: `Your OTP is ${otp}` });
 
   // WhatsApp
-  await sendWhatsAppOtp({ to: `${pc}${pn}`, otp });
+  // await sendWhatsAppOtp({ to: `${pc}${pn}`, otp });
 
   // DEV ONLY
   if (String(process.env.NODE_ENV || "").toLowerCase() !== "production") {
@@ -66,8 +66,7 @@ exports.sendOTP = async (phoneCode, phoneNumber) => {
     success: true,
     code: 200,
     message: "success.otp_sent",
-    result: { phoneCode: pc, phoneNumber: pn }, // no otp in prod response
-    otp, // DEV ONLY: remove in production
+    result: { phoneCode: pc, phoneNumber: pn, otp }, // no otp in prod response
   };
 };
 
@@ -135,8 +134,7 @@ exports.sendEmailOTP = async (email, lang) => {
     success: true,
     code: 200,
     message: "success.otp_sent",
-    result: { email: em }, // no otp in prod response
-    otp, // DEV ONLY: remove in production
+    result: { email: em, otp }, // no otp in prod response
   };
 };
 
