@@ -36,6 +36,7 @@ const groupSchema = new Schema(
           paidAmount: { type: Number, default: 0, min: 0 },
           paidAt: { type: Date, default: null },
           transactionStatus: { type: Boolean, default: false },
+          transactionId: { type: String, trim: true, default: "" },
         },
       ],
       default: [],

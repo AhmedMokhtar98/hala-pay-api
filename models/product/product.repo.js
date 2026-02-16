@@ -195,7 +195,7 @@ exports.listProducts = async (
     .find(finalFilter)
     .select(selectionObject)
     .populate("store", "businessName storeId logo")
-    .populate("category", "name image store isActive")
+    .populate("category", "nameEn nameAr image store isActive")
     .sort(normalizedSort)
     .limit(limitNumber)
     .skip((pageNumber - 1) * limitNumber)

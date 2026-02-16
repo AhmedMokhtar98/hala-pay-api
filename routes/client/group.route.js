@@ -17,7 +17,7 @@ const {
 } = require("../../validations/group.client.validation");
 
 const { uploadImage } = require("../../multer/uploadImage");
-const groupImageUpload = uploadImage({ module: "groups", idParam: "groupId" });
+const groupImageUpload = uploadImage({ module: "groups", idParam: "_id" });
 // _____________________________________________ ROUTES _________________________________________________ // 
 
 router.post("/", validator(createGroupValidation), errorHandler(groupController.createGroup));
@@ -28,6 +28,8 @@ router.delete( "/image/remove", validator(removeGroupImageValidation), errorHand
 
 router.get("/link", validator(getGroupInviteLinkValidation), errorHandler(groupController.getGroupInviteLink));
 router.post("/join", validator(joinGroupByTokenValidation), errorHandler(groupController.joinGroupByToken));
+
+
 
 
 router.put( "/:_id", validator(updateGroupValidation), errorHandler(groupController.updateGroup) );
