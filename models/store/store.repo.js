@@ -54,7 +54,7 @@ exports.listStores = async (
     limitNumber,
   } = prepareQueryObjects(filterObject, sortObject, {
     sortableFields: ["createdAt", "businessName"],
-    defaultSort: "-createdAt",
+    defaultSort: "createdAt",
   });
 
   const finalFilter = applySearchFilter(normalizedFilter, ["businessName"]);

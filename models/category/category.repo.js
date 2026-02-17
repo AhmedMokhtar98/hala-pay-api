@@ -137,7 +137,7 @@ exports.listCategories = async (
     limitNumber,
   } = prepareQueryObjects(filterObject, sortObject, {
     sortableFields: ["createdAt", "nameEn", "nameAr"],
-    defaultSort: "-createdAt",
+    defaultSort: "createdAt",
   });
 
   if (normalizedFilter?.storeId) {
