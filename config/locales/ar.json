@@ -184,6 +184,7 @@
     "hero_slide_image_updated": "تم تحديث صورة سلايد الهيرو بنجاح.",
     "hero_slide_image_removed": "تم إزالة صورة سلايد الهيرو بنجاح.",
     "image_updated": "تم تحديث الصورة بنجاح",
-    "image_removed": "تم حذف الصورة بنجاح"
+    "image_removed": "تم حذف الصورة بنجاح",
+    "logged_out": "تم تسجيل الخروج بنجاح"
    }
 }
