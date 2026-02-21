@@ -60,8 +60,8 @@ exports.generateToken = (payloadObject = {}) => {
     const accessSecret = assertEnv("ACCESS_TOKEN_SECRET", "errors.missing_access_token_secret");
     const refreshSecret = assertEnv("REFRESH_TOKEN_SECRET", "errors.missing_refresh_token_secret");
 
-    const accessExpiry = process.env.ACCESS_TOKEN_EXPIRY || "1d";
-    const refreshExpiry = process.env.REFRESH_TOKEN_EXPIRY || "30d"; // safer default than 5m
+    const accessExpiry = process.env.ACCESS_TOKEN_EXPIRY || "7d";
+    const refreshExpiry = process.env.REFRESH_TOKEN_EXPIRY || "30d"; 
 
     const cleanPayload = stripTokenMeta(payloadObject);
 
@@ -283,7 +283,7 @@ exports.verifyGroupInviteToken = (token) => {
     if (!token) throw new BadRequestException("errors.required_token");
 
     const decoded = jwt.verify(token, secret, { algorithms: ["HS256"] });
-
+  
     if (decoded?.type !== "group_invite" || !decoded?.gid) {
       throw new ForbiddenException("errors.invalid_or_expired_invite");
     }
