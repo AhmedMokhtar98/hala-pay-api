@@ -31,14 +31,34 @@ jobs:
 
             cd /var/www/hala-pay-api
 
+            echo "🔒 Backing up server .env (if exists)..."
+            if [ -f .env ]; then
+              cp .env /tmp/hala-pay-api.env.bak
+              echo "✅ .env backed up to /tmp/hala-pay-api.env.bak"
+            else
+              echo "ℹ️ No .env found on server (will not restore)"
+            fi
+
             # Pull latest code
+            echo "⬇️ Fetching latest code..."
             git fetch --all
             git reset --hard origin/master
 
+            echo "🔁 Restoring server .env (if backup exists)..."
+            if [ -f /tmp/hala-pay-api.env.bak ]; then
+              mv /tmp/hala-pay-api.env.bak .env
+              chmod 600 .env || true
+              echo "✅ .env restored"
+            else
+              echo "ℹ️ No backup found, skipped restore"
+            fi
+
             # Install dependencies
+            echo "📦 Installing dependencies..."
             npm install --force
 
             # Restart Node.js app via PM2 (zero downtime)
+            echo "♻️ Reloading PM2..."
             pm2 reload hala-pay-api || pm2 start index.js --name hala-pay-api
 
             echo "✅ Deployment succeeded"
