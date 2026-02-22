@@ -1,9 +1,4 @@
 // server.js  ✅ FULL CODE (Mongo + Redis connect) + graceful shutdown
-// Assumes:
-// - connectDB() returns a Promise (recommended). If yours doesn't, it's still okay.
-// - ./redis/redis.config.js exports connectRedis() and disconnectRedis()
-// - Your existing middlewares stay same order.
-
 const express = require("express");
 const connectDB = require("./db.js");
 const dotenv = require("dotenv");
@@ -20,6 +15,9 @@ const translateResponseMiddleware = require("./middlewares/errorHandler/translat
 
 // ✅ Redis
 const { connectRedis, disconnectRedis, redisClient } = require("./redis/redis.config.js");
+
+// ✅ Groups Deadline Job
+const { startGroupsDeadlineJob, stopGroupsDeadlineJob } = require("./jobs/groupsDeadline.job.js");
 
 dotenv.config();
 
@@ -97,7 +95,6 @@ app.use("/api/v1", routes);
 // -------------------------
 app.get("/health", async (req, res) => {
   try {
-    // If redis isn't connected yet, this throws or returns error
     const redisStatus = redisClient?.isOpen ? await redisClient.ping() : "DISCONNECTED";
     return res.json({ ok: true, redis: redisStatus, mongo: "ok" });
   } catch (e) {
@@ -117,12 +114,18 @@ const PORT = process.env.PORT || 7000;
 
 async function startServer() {
   try {
+    // 1) Connect Mongo
     await Promise.resolve(connectDB());
     console.log("✅ MongoDB connected");
 
     // 2) Connect Redis
     await connectRedis();
     console.log("✅ Redis connected");
+
+    // ✅ Start Groups Deadline Job:
+    // - runs once on boot (default true)
+    // - runs daily 00:00 Africa/Cairo
+    startGroupsDeadlineJob();
 
     // 3) Start server
     const server = app.listen(PORT, () => {
@@ -134,13 +137,15 @@ async function startServer() {
       try {
         console.log(`\n🛑 Received ${signal}. Shutting down...`);
 
+        // ✅ Stop cron first
+        await stopGroupsDeadlineJob();
+
         server.close(async () => {
           await disconnectRedis();
           console.log("✅ Shutdown complete.");
           process.exit(0);
         });
 
-        // Force exit if stuck
         setTimeout(() => process.exit(1), 15000).unref();
       } catch (err) {
         console.error("❌ Shutdown error:", err);

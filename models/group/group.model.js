@@ -19,7 +19,6 @@ const groupSchema = new Schema(
     image: { type: String, default: "" },
 
     product: { type: Schema.Types.ObjectId, ref: "products", required: true, index: true },
-
     store: { type: Schema.Types.ObjectId, ref: "stores", required: true, index: true },
 
     targetAmount: { type: Number, required: true, min: 0 },
@@ -50,16 +49,28 @@ const groupSchema = new Schema(
     },
 
     deadLine: { type: Date, default: null },
-
     isActive: { type: Boolean, default: true, index: true },
   },
   { timestamps: true, versionKey: false }
 );
 
-// helpful indexes
+/* =========================
+   ✅ PERFECT INDEXES
+   ========================= */
+
+// 1) Store page / dashboard filters
 groupSchema.index({ store: 1, status: 1 });
+
+// 2) Product page filters
 groupSchema.index({ product: 1, status: 1 });
-groupSchema.index({ isActive: 1, deadLine: 1 });
+
+// 3) ✅ Cron job: close expired active groups fast
+// query: { status:"active", isActive:true, deadLine:{$lte: now} }
+groupSchema.index({ status: 1, isActive: 1, deadLine: 1 });
+
+// 4) (Optional but recommended) My groups / admin list by creator
+// Often used with sorting by newest
+groupSchema.index({ creator: 1, status: 1, createdAt: -1 });
 
 /* ---------------- AUTO CALC collectedAmount ---------------- */
 
@@ -84,7 +95,7 @@ const applyCollectedInUpdate = async function (next) {
   const incomingContrib =
     update.contributors ??
     $set.contributors ??
-    (update.$push?.contributors ? null : null); // (push not handled here)
+    (update.$push?.contributors ? null : null);
 
   // If $push/$pull is used, we need to fetch final doc to recalc safely
   const usesAtomic =
@@ -101,11 +112,9 @@ const applyCollectedInUpdate = async function (next) {
     const doc = await this.model.findOne(this.getQuery()).lean();
     const current = doc?.contributors || [];
 
-    // simulate minimal atomic operations for contributors
     let final = current;
 
     if (update.$pull?.contributors) {
-      // example: {$pull: {contributors: {client: someId}}}
       const cond = update.$pull.contributors;
       if (cond?.client) {
         final = final.filter((c) => String(c.client) !== String(cond.client));
@@ -137,7 +146,6 @@ const applyCollectedInUpdate = async function (next) {
     return next();
   }
 
-  // if contributors not changed => just ensure collectedAmount can't be set manually
   this.setUpdate(update);
   next();
 };
