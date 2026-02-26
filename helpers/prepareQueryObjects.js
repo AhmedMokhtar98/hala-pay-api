@@ -1,28 +1,31 @@
+// ==============================
+// utils/prepareQueryObjects.js
+// ==============================
 /**
  * prepareQueryObjects.js
- * 
+ *
  * Normalize query params into:
  *  - filterObject: pure Mongo filter (no page/limit/sort)
  *  - sortObject: { field: 1 | -1 }
  *  - pageNumber, limitNumber: sanitized numbers
- * 
- * Usage: 
- * const { filterObject, sortObject, pageNumber, limitNumber } = prepareQueryObjects(req.query);
  */
-
 module.exports = function prepareQueryObjects(rawFilter = {}, rawSort = {}, options = {}) {
   const {
-    defaultSort = "-createdAt", // default sorting if none provided
-    allowAllFields = false, // if true, allows sorting by any field in query
+    defaultSort = "-createdAt",
+    allowAllFields = false,
   } = options;
 
-  const filterObject = { ...rawFilter };
+  // ✅ deep-clone to preserve operators like {$in: [...]}
+  const filterObject =
+    typeof structuredClone === "function"
+      ? structuredClone(rawFilter)
+      : JSON.parse(JSON.stringify(rawFilter));
 
   // Pagination
   const pageNumber = Math.max(Number(filterObject.page) || 1, 1);
   const limitNumber = Math.min(Math.max(Number(filterObject.limit) || 10, 1), 100);
 
-  const sortParam = filterObject.sort; // e.g., "-monthlyFees" or "name"
+  const sortParam = filterObject.sort;
 
   // Clean special params
   delete filterObject.page;
@@ -45,10 +48,6 @@ module.exports = function prepareQueryObjects(rawFilter = {}, rawSort = {}, opti
   };
 };
 
-/**
- * Build a MongoDB sort object from a string like "-fieldName"
- * Supports any field if allowAllFields = true
- */
 function buildSort(sortExpr, allowAllFields = false) {
   if (!sortExpr) return {};
 
@@ -60,7 +59,6 @@ function buildSort(sortExpr, allowAllFields = false) {
     direction = -1;
   }
 
-  // Only allow alphanumeric, dot, and underscore field names
   if (!allowAllFields && !field.match(/^[\w.]+$/)) {
     return {};
   }

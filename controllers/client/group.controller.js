@@ -18,8 +18,9 @@ exports.createGroup = async (req, res) => {
 exports.listGroups = async (req, res) => {
   // ✅ return only groups that belong to this client (creator OR contributor)
   const clientId = req.user?._id;
-
+console.log("status query =>", req.query.status);
   const filterObject = req.query;
+  console.log("Raw query params:", filterObject);
   const op = await groupRepo.listGroups(clientId, filterObject, {}, {});
   return res.status(op.code).json(op);
 };
