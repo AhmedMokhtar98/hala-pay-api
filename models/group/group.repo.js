@@ -121,12 +121,7 @@ exports.createGroup = async (groupData = {}) => {
   return { success: true, code: 201, result: doc };
 };
 
-// ==============================
-// services/groups.service.js (your listGroups)
-// ==============================
-exports.listGroups = async (clientId, filterObject = {}, selectionObject = {}, sortObject = {}) => {
-  if (!clientId) throw new BadRequestException("errors.unauthorized");
-
+exports.listGroups = async (filterObject, selectionObject = {}, sortObject = {}) => {
   const {
     filterObject: normalizedFilter,
     sortObject: normalizedSort,
@@ -137,19 +132,57 @@ exports.listGroups = async (clientId, filterObject = {}, selectionObject = {}, s
     defaultSort: "-createdAt",
   });
 
-  // ✅ IMPORTANT:
-  // at this point, req.query.status is either:
-  // - "funded" OR
-  // - { $in: ["funded","purchased"] }
-  // and prepareQueryObjects deep-cloned it safely
+  /* ---------------- targetAmount range (price from/to) ---------------- */
 
-  const finalFilter = applySearchFilter(
-    { ...normalizedFilter, ...belongsFilter(clientId) },
-    ["name", "description"]
+  const toNumOrNull = (v) => {
+    if (v === undefined || v === null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const minTargetAmount = toNumOrNull(
+    normalizedFilter.minPrice ??
+      normalizedFilter.from ??
+      normalizedFilter.minTargetAmount ??
+      normalizedFilter.minTarget ??
+      normalizedFilter.targetFrom
   );
 
-  // (optional debug)
-  // console.log("FINAL FILTER =>", JSON.stringify(finalFilter));
+  const maxTargetAmount = toNumOrNull(
+    normalizedFilter.maxPrice ??
+      normalizedFilter.to ??
+      normalizedFilter.maxTargetAmount ??
+      normalizedFilter.maxTarget ??
+      normalizedFilter.targetTo
+  );
+
+  // remove keys so they don't become normal mongo filters
+  [
+    "minPrice",
+    "maxPrice",
+    "from",
+    "to",
+    "minTargetAmount",
+    "maxTargetAmount",
+    "minTarget",
+    "maxTarget",
+    "targetFrom",
+    "targetTo",
+  ].forEach((k) => delete normalizedFilter[k]);
+
+  // apply range directly (targetAmount is Number in your response)
+  if (minTargetAmount !== null || maxTargetAmount !== null) {
+    normalizedFilter.targetAmount = {
+      ...(minTargetAmount !== null ? { $gte: minTargetAmount } : {}),
+      ...(maxTargetAmount !== null ? { $lte: maxTargetAmount } : {}),
+    };
+  }
+
+  /* ---------------- search over: name, description ---------------- */
+
+  const finalFilter = applySearchFilter(normalizedFilter, ["name", "description"]);
+
+  /* ---------------- selection safety ---------------- */
 
   const ensureStoreSelected = (sel = {}) => {
     if (!sel || Object.keys(sel).length === 0) return sel;
@@ -157,11 +190,13 @@ exports.listGroups = async (clientId, filterObject = {}, selectionObject = {}, s
     const values = Object.values(sel).map((v) => Number(v));
     const isIncludeMode = values.some((v) => v === 1);
 
-    if (isIncludeMode) return { ...sel, store: 1, product: 1, contributors: 1, creator: 1 };
+    if (isIncludeMode) return { ...sel, store: 1, product: 1, contributors: 1 };
     return sel;
   };
 
   const safeSelection = ensureStoreSelected(selectionObject);
+
+  /* ---------------- query ---------------- */
 
   const query = populateGroupQuery(
     groupModel
@@ -186,6 +221,7 @@ exports.listGroups = async (clientId, filterObject = {}, selectionObject = {}, s
     limit: limitNumber,
   };
 };
+
 
 exports.getGroup = async (groupId) => {
   const doc = await populateGroupQuery(groupModel.findById(groupId)).lean();
