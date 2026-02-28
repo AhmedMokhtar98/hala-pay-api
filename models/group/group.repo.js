@@ -4,6 +4,8 @@ const path = require("path");
 
 const applySearchFilter = require("../../helpers/applySearchFilter");
 const prepareQueryObjects = require("../../helpers/prepareQueryObjects");
+const mongoose = require("mongoose");
+const YallaPayOrder = require("../order/order.model");
 
 const {
   NotFoundException,
@@ -12,6 +14,7 @@ const {
 
 const groupModel = require("./group.model");
 const productModel = require("../product/product.model"); // adjust if needed
+const { createYallaPayOrder } = require("../../providers/salla/services/order.service");
 
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 
@@ -272,11 +275,37 @@ exports.updateGroup = async (groupId, body = {}) => {
     body.collectedAmount = collectedAmount;
   }
 
-  const updated = await groupModel.findByIdAndUpdate(groupId, body, { new: true });
+  const updated = await groupModel.findByIdAndUpdate(groupId, body, {
+    new: true,
+  });
+
   if (!updated) throw new NotFoundException("errors.group_not_found");
 
-  const doc = await populateGroupQuery(groupModel.findById(updated._id)).lean();
-  return { success: true, code: 200, result: doc };
+  /* =========================================================
+     🔥 AUTO PURCHASE TRIGGER
+  ========================================================= */
+
+  try {
+    if (
+      updated.collectedAmount >= updated.targetAmount &&
+      updated.status !== "purchased"
+    ) {
+      // 🔥 Don't block response if purchase fails
+      await checkAndPurchaseGroup(updated._id);
+    }
+  } catch (err) {
+    console.error("Auto purchase failed:", err.message);
+  }
+
+  const doc = await populateGroupQuery(
+    groupModel.findById(updated._id)
+  ).lean();
+
+  return {
+    success: true,
+    code: 200,
+    result: doc,
+  };
 };
 
 exports.deleteGroup = async (_id, permanent = false) => {
@@ -397,4 +426,115 @@ exports.removeGroupImage = async (groupId) => {
     message: "success.image_removed",
     result: populated,
   };
+};
+
+
+/**
+ * 🔥 Safely purchase funded group
+ * - Prevents race conditions
+ * - Prevents duplicate orders
+ * - Uses transaction
+ * - Uses purchaseLock
+ */
+async function checkAndPurchaseGroup(groupId) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const group = await groupModel.findById(groupId).session(session);
+    if (!group) throw new Error("Group not found");
+
+    // 🛑 Already purchased
+    if (group.status === "purchased") {
+      await session.abortTransaction();
+      session.endSession();
+      return null;
+    }
+
+    // 🛑 Not fully funded
+    if (group.collectedAmount < group.targetAmount) {
+      await session.abortTransaction();
+      session.endSession();
+      return null;
+    }
+
+    // 🛑 Someone already processing it
+    if (group.purchaseLock === true) {
+      await session.abortTransaction();
+      session.endSession();
+      return null;
+    }
+
+    // 🔐 Lock group
+    group.purchaseLock = true;
+    await group.save({ session });
+
+    // 🛑 Double safety (idempotency)
+    const existingOrder = await YallaPayOrder.findOne({
+      group: group._id,
+    }).session(session);
+
+    if (existingOrder) {
+      group.status = "purchased";
+      group.providerOrderId = existingOrder.providerOrderId;
+      group.purchasedAt = new Date();
+      group.purchaseLock = false;
+
+      await group.save({ session });
+      await session.commitTransaction();
+      session.endSession();
+
+      return existingOrder;
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // 🚀 Call Salla OUTSIDE transaction
+    const order = await createYallaPayOrder({ group });
+
+    await groupModel.updateOne(
+      { _id: group._id },
+      {
+        $set: {
+          status: "purchased",
+          providerOrderId: order.providerOrderId,
+          purchasedAt: new Date(),
+          purchaseLock: false,
+        },
+      }
+    );
+
+    return order;
+
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+
+    // 🔓 Unlock on failure
+    await groupModel.updateOne(
+      { _id: groupId },
+      { $set: { purchaseLock: false } }
+    );
+
+    throw err;
+  }
+}
+
+/**
+ * Optional manual trigger wrapper
+ */
+async function purchaseGroupNow(groupId) {
+  const order = await checkAndPurchaseGroup(groupId);
+
+  return {
+    success: true,
+    code: 200,
+    result: order,
+  };
+}
+
+module.exports = {
+  checkAndPurchaseGroup,
+  purchaseGroupNow,
 };

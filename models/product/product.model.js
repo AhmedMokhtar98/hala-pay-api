@@ -1,34 +1,56 @@
+// models/product/product.model.js
 const mongoose = require("mongoose");
+
+const priceSchema = new mongoose.Schema(
+  {
+    amount: { type: Number, default: 0, min: 0 },
+    currency: { type: String, default: "SAR", trim: true },
+  },
+  { _id: false }
+);
+
+const variantSchema = new mongoose.Schema(
+  {
+    providerVariantId: { type: String, default: "", trim: true, index: true },
+
+    sku: { type: String, default: "", trim: true },
+    name: { type: String, default: "", trim: true },
+
+    price: { type: priceSchema, default: () => ({}) },
+    compareAtPrice: { type: priceSchema, default: () => ({}) },
+
+    stock: { type: Number, default: 0, min: 0 },
+    unlimited: { type: Boolean, default: false },
+
+    isAvailable: { type: Boolean, default: true },
+    options: { type: mongoose.Schema.Types.Mixed, default: null }, // size/color mapping
+  },
+  { _id: false }
+);
 
 const productSchema = new mongoose.Schema(
   {
-    store: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "stores",
-      required: true,
-      index: true,
+    // link to your connected store (internal)
+    store: { type: mongoose.Schema.Types.ObjectId, ref: "stores", required: true, index: true },
+
+    // provider identity
+    provider: { type: String, required: true, lowercase: true, trim: true, index: true },
+    providerProductId: { type: String, required: true, trim: true, index: true },
+
+    // basic info
+    name: { type: String, default: "", trim: true, index: true },
+    description: { type: String, default: "", trim: true },
+
+    // urls
+    urls: {
+      customer: { type: String, default: "", trim: true },
+      admin: { type: String, default: "", trim: true },
+      product_card: { type: String, default: "", trim: true },
     },
 
-    category: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "categories",
-      required: true,
-      index: true,
-    },
-
-    name: {
-      type: String,
-      default: "",
-      trim: true,
-      index: true,
-    },
-
-    description: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
+    // images
+    thumbnail: { type: String, default: "", trim: true },
+    mainImage: { type: String, default: "", trim: true },
     images: {
       type: [String],
       default: [],
@@ -38,71 +60,72 @@ const productSchema = new mongoose.Schema(
       },
     },
 
-    priceBefore: {
-      type: Number,
-      default: 0,
-      min: 0,
+    // pricing
+    price: { type: priceSchema, default: () => ({}) },
+    compareAtPrice: { type: priceSchema, default: () => ({}) }, // priceBefore
+    salePrice: { type: priceSchema, default: () => ({}) },
+
+    // inventory / availability
+    stock: { type: Number, default: 0, min: 0 },
+    unlimited: { type: Boolean, default: false },
+    isAvailable: { type: Boolean, default: true, index: true },
+
+    // status mapping (unified)
+    // active | draft | archived
+    status: { type: String, default: "active", index: true },
+
+    // categories (provider category IDs + optional refs)
+    categories: [
+      {
+        providerCategoryId: { type: String, default: "", trim: true, index: true },
+        name: { type: String, default: "", trim: true },
+        categoryRef: { type: mongoose.Schema.Types.ObjectId, ref: "categories", default: null },
+      },
+    ],
+
+    // variants (optional)
+    variants: { type: [variantSchema], default: [] },
+
+    // meta
+    sku: { type: String, default: "", trim: true, index: true },
+    weight: { type: Number, default: 0, min: 0 },
+    weightUnit: { type: String, default: "kg", trim: true },
+
+    rating: {
+      count: { type: Number, default: 0, min: 0 },
+      rate: { type: Number, default: 0, min: 0 },
     },
 
-    price: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+    // snapshot of provider object
+    raw: { type: mongoose.Schema.Types.Mixed, default: null },
 
-    stock: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    discount: {
-      type: Number,
-      default: 0,
-      min: 0,
-      max: 100,
-    },
-
-    isActive: {
-      type: Boolean,
-      default: true,
-      index: true,
-    },
+    // flags
+    isActive: { type: Boolean, default: true, index: true },
   },
-  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
+  { timestamps: true }
 );
 
-productSchema.pre("validate", function (next) {
-  const pb = Number(this.priceBefore || 0);
-  const p = Number(this.price || 0);
+// prevent duplicates per store+provider+id
+productSchema.index({ store: 1, provider: 1, providerProductId: 1 }, { unique: true });
 
-  if (pb > 0 && p > 0 && pb < p) {
-    this.invalidate("priceBefore", "priceBefore must be >= price");
+// helper virtuals
+productSchema.virtual("discountPercent").get(function () {
+  const before = Number(this.compareAtPrice?.amount || 0);
+  const now = Number(this.price?.amount || 0);
+  if (before > 0 && now > 0 && before > now) {
+    return Math.round(((before - now) / before) * 100);
   }
-
-  if (pb > 0 && p > 0) {
-    const d = Math.round(((pb - p) / pb) * 100);
-    this.discount = Math.min(100, Math.max(0, d));
-  }
-
-  next();
-});
-
-productSchema.virtual("finalPrice").get(function () {
-  const p = Number(this.price || 0);
-  if (p > 0) return p;
-
-  const pb = Number(this.priceBefore || 0);
-  const d = Number(this.discount || 0);
-
-  if (pb > 0 && d > 0) return Math.max(0, +(pb * (1 - d / 100)).toFixed(2));
   return 0;
 });
 
-productSchema.virtual("hasDiscount").get(function () {
-  return Number(this.priceBefore || 0) > 0 && Number(this.price || 0) > 0 && Number(this.priceBefore) > Number(this.price);
+productSchema.virtual("finalPrice").get(function () {
+  const sale = Number(this.salePrice?.amount || 0);
+  if (sale > 0) return sale;
+  const now = Number(this.price?.amount || 0);
+  return now;
 });
 
-productSchema.index({ store: 1, category: 1, createdAt: -1 });
+productSchema.set("toJSON", { virtuals: true });
+productSchema.set("toObject", { virtuals: true });
 
 module.exports = mongoose.model("products", productSchema);

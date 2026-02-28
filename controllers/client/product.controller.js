@@ -1,22 +1,25 @@
 // controllers/admin/product.controller.js
 const productRepo = require("../../models/product/product.repo");
+const { listUnifiedProducts } = require("../../providers/services/products/unifiedProducts.service");
+
 
 exports.listProducts = async (req, res) => {
-  const filterObject = req.query;
+  const provider = String(req.query.provider || "").toLowerCase().trim();
+  const providerStoreId = String(req.query.storeId || "").trim();
 
-  const populate =
-    String(req.query.populate || "").toLowerCase() === "true" ||
-    String(req.query.populate || "") === "1";
+  // ✅ keep provider in filters only if provided
+  const filters = { ...req.query };
+  if (provider) filters.provider = provider;
 
-  const operationResultObject = await productRepo.listProducts(
-    filterObject,
-    {},
-    {},
-    { populate }
-  );
+  const result = await listUnifiedProducts({
+    providerStoreId: providerStoreId || null,
+    filters,
+    store: req.store || null, // ✅ set by middleware (optional)
+  });
 
-  return res.status(operationResultObject.code).json(operationResultObject);
+  return res.status(result?.code || 200).json(result);
 };
+
 
 exports.getProductDetails = async (req, res) => {
   const { productId } = req.params;

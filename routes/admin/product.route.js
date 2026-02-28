@@ -4,11 +4,12 @@ const productController = require("../../controllers/admin/product.controller");
 const errorHandler = require("../../middlewares/errorHandler");
 const { uploadImage } = require("../../multer/uploadImage");
 const productImagesUpload = uploadImage({ module: "products", idParam: "productId", maxSizeMB: 5, });
-const { createProductValidation, listProductsValidation, productIdParamsValidation, updateProductValidation, deleteProductValidation, uploadProductImagesValidation, } = require("../../validations/product.validation");
+const { createProductValidation, productIdParamsValidation, updateProductValidation, deleteProductValidation, uploadProductImagesValidation, } = require("../../validations/product.validation");
 const validator = require("../../helpers/validation.helper")
+const {loadStoreByProvider} = require("../../middlewares/loadStoreByProvider.middleware");
 
 
-router.get("/", validator(listProductsValidation), errorHandler(productController.listProducts));
+router.get("/", loadStoreByProvider, errorHandler(productController.listProducts));
 
 router.post("/", validator(createProductValidation), errorHandler(productController.createProduct));
 

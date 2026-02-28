@@ -1,11 +1,11 @@
-// server.js  ✅ FULL CODE (Mongo + Redis connect) + graceful shutdown
+// server.js  ✅ FULL CLEAN VERSION
+
 const express = require("express");
 const connectDB = require("./db.js");
 const dotenv = require("dotenv");
 const path = require("path");
 const morgan = require("morgan");
 const cors = require("cors");
-const { passport } = require("./utils/passport.js");
 const i18n = require("./config/i18n");
 const errorMiddleware = require("./middlewares/errorHandler/errorMiddleware.js");
 const routes = require("./routes/index.route.js");
@@ -13,28 +13,46 @@ const session = require("express-session");
 const decryptPasswordMiddleware = require("./middlewares/decryptPassword.js");
 const translateResponseMiddleware = require("./middlewares/errorHandler/translate-response.middleware.js");
 
-// ✅ Redis
-const { connectRedis, disconnectRedis, redisClient } = require("./redis/redis.config.js");
+// Redis
+const {
+  connectRedis,
+  disconnectRedis,
+  redisClient,
+} = require("./redis/redis.config.js");
 
-// ✅ Groups Deadline Job
-const { startGroupsDeadlineJob, stopGroupsDeadlineJob } = require("./jobs/groupsDeadline.job.js");
+// Jobs
+const {
+  startGroupsDeadlineJob,
+  stopGroupsDeadlineJob,
+} = require("./jobs/groupsDeadline.job.js");
+
+const {
+  startProductsSyncJob,
+  stopProductsSyncJob,
+} = require("./jobs/productsSync.job.js");
+
+const {
+  startCategoriesSyncJob,
+  stopCategoriesSyncJob,
+} = require("./jobs/categoriesSync.job.js");
 
 dotenv.config();
 
 const app = express();
 
-// -------------------------
-// Logging
-// -------------------------
+/* =========================
+   Logging & Core
+========================= */
+
 app.use(morgan("combined"));
 app.use(cors());
-app.use(passport.initialize());
 app.use(i18n.init);
 app.use(express.static(path.join(process.cwd(), "public")));
 
-// -------------------------
-// Session
-// -------------------------
+/* =========================
+   Session
+========================= */
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "fallback",
@@ -44,101 +62,129 @@ app.use(
   })
 );
 
-// -------------------------
-// Locale middleware
-// -------------------------
+/* =========================
+   Locale middleware
+========================= */
+
 app.use((req, res, next) => {
   const langHeader = req.headers["accept-language"];
   const lang = langHeader ? langHeader.substring(0, 2).toLowerCase() : null;
-  req.setLocale(lang && ["en", "ar"].includes(lang) ? lang : i18n.getLocale());
+  req.setLocale(
+    lang && ["en", "ar"].includes(lang)
+      ? lang
+      : i18n.getLocale()
+  );
   next();
 });
 
-// -------------------------
-// Views
-// -------------------------
+/* =========================
+   Views
+========================= */
+
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/public", express.static(path.join(process.cwd(), "public")));
 
-// -------------------------
-// Normal body parsing (JSON) for non-webhook routes
-// -------------------------
+/* =========================
+   Body parsing
+========================= */
+
 app.use((req, res, next) => {
-  if (req.originalUrl.startsWith("/api/v1/webhook")) return next();
+  if (req.originalUrl.startsWith("/api/v1/webhook"))
+    return next();
   express.json()(req, res, next);
 });
 
 app.use((req, res, next) => {
-  if (req.originalUrl.startsWith("/api/v1/webhook")) return next();
+  if (req.originalUrl.startsWith("/api/v1/webhook"))
+    return next();
   express.urlencoded({ extended: true })(req, res, next);
 });
 
-// -------------------------
-// Custom middlewares
-// -------------------------
+/* =========================
+   Custom Middlewares
+========================= */
+
 app.use(decryptPasswordMiddleware);
 
-// -------------------------
-// Routes
-// -------------------------
+/* =========================
+   Routes
+========================= */
+
 app.get("/", (req, res) => res.render("view"));
 
 app.use(translateResponseMiddleware);
-
-// Mount API routes (includes webhook)
 app.use("/api/v1", routes);
 
-// -------------------------
-// Health check (Mongo + Redis)
-// -------------------------
+/* =========================
+   Health Check
+========================= */
+
 app.get("/health", async (req, res) => {
   try {
-    const redisStatus = redisClient?.isOpen ? await redisClient.ping() : "DISCONNECTED";
-    return res.json({ ok: true, redis: redisStatus, mongo: "ok" });
+    const redisStatus = redisClient?.isOpen
+      ? await redisClient.ping()
+      : "DISCONNECTED";
+
+    return res.json({
+      ok: true,
+      redis: redisStatus,
+      mongo: "ok",
+    });
   } catch (e) {
-    return res.status(500).json({ ok: false, redis: e?.message || "error", mongo: "ok" });
+    return res.status(500).json({
+      ok: false,
+      redis: e?.message || "error",
+      mongo: "ok",
+    });
   }
 });
 
-// -------------------------
-// Global error handling
-// -------------------------
+/* =========================
+   Global Error Handler
+========================= */
+
 app.use(errorMiddleware);
 
-// -------------------------
-// Startup
-// -------------------------
+/* =========================
+   Startup
+========================= */
+
 const PORT = process.env.PORT || 7000;
 
 async function startServer() {
   try {
-    // 1) Connect Mongo
+    // 1️⃣ Mongo
     await Promise.resolve(connectDB());
     console.log("✅ MongoDB connected");
 
-    // 2) Connect Redis
+    // 2️⃣ Redis
     await connectRedis();
     console.log("✅ Redis connected");
 
-    // ✅ Start Groups Deadline Job:
-    // - runs once on boot (default true)
-    // - runs daily 00:00 Africa/Cairo
+    // 3️⃣ Start Jobs
     startGroupsDeadlineJob();
+    startCategoriesSyncJob();
+    startProductsSyncJob();
 
-    // 3) Start server
+    // 4️⃣ Start Express
     const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
 
-    // 4) Graceful shutdown
+    /* =========================
+       Graceful Shutdown
+    ========================= */
+
     const shutdown = async (signal) => {
       try {
         console.log(`\n🛑 Received ${signal}. Shutting down...`);
 
-        // ✅ Stop cron first
+        // Stop cron jobs first
         await stopGroupsDeadlineJob();
+        await stopCategoriesSyncJob();
+        await stopProductsSyncJob();
 
         server.close(async () => {
           await disconnectRedis();

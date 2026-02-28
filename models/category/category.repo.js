@@ -1,10 +1,14 @@
 // category.repo.js
 const fs = require("fs");
 const path = require("path");
+const mongoose = require("mongoose");
 
 const applySearchFilter = require("../../helpers/applySearchFilter");
 const prepareQueryObjects = require("../../helpers/prepareQueryObjects");
-const { ConflictException, NotFoundException } = require("../../middlewares/errorHandler/exceptions");
+const {
+  ConflictException,
+  NotFoundException,
+} = require("../../middlewares/errorHandler/exceptions");
 
 const categoryModel = require("./category.model");
 const storeModel = require("../store/store.model");
@@ -25,26 +29,203 @@ function normStr(v) {
   return String(v || "").trim();
 }
 
+function toStr(v) {
+  return String(v ?? "").trim();
+}
+
+function parseMulti(v) {
+  if (v == null) return [];
+  if (Array.isArray(v)) return v.flatMap(parseMulti);
+  const s = String(v).trim();
+  if (!s) return [];
+  return s
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function isObjectId(x) {
+  const s = toStr(x);
+  return mongoose.Types.ObjectId.isValid(s);
+}
+
+function normProvider(x) {
+  const s = toStr(x).toLowerCase();
+  return s && s !== "all" ? s : "";
+}
+
+function emptyList(pageNumber, limitNumber) {
+  return {
+    success: true,
+    code: 200,
+    result: [],
+    count: 0,
+    page: pageNumber,
+    limit: limitNumber,
+  };
+}
+
 /**
  * Resolve store reference from payload/query:
  * accepts:
  *  - store (ObjectId)
- *  - storeId (9 digits string in stores collection)
+ *  - storeId:
+ *      - internal ObjectId
+ *      - provider storeId (like salla store id)
+ *  - provider (optional) to disambiguate when storeId is provider storeId
+ *
+ * Supports BOTH store.provider.* and store.providers.* shapes.
  */
-async function resolveStoreId({ store, storeId }) {
+async function resolveStoreId({ store, storeId, provider = null }) {
   if (store) return store;
 
-  if (storeId) {
-    const storeDoc = await storeModel
-      .findOne({ storeId: String(storeId) })
+  const storeIdStr = toStr(storeId);
+  const providerName = normProvider(provider);
+
+  if (!storeIdStr) return null;
+
+  // 1) internal ObjectId
+  if (isObjectId(storeIdStr)) {
+    return new mongoose.Types.ObjectId(storeIdStr);
+  }
+
+  // 2) BEST: provider + providerStoreId
+  if (providerName) {
+    const doc = await storeModel
+      .findOne({
+        isActive: true,
+        $or: [
+          { "provider.name": providerName, "provider.storeId": storeIdStr },
+          { "providers.name": providerName, "providers.storeId": storeIdStr },
+          // legacy: some projects had top-level storeId
+          { storeId: storeIdStr, "provider.name": providerName },
+        ],
+      })
       .select({ _id: 1 })
       .lean();
 
-    if (!storeDoc) return null;
-    return storeDoc._id;
+    return doc?._id || null;
   }
 
-  return null;
+  // 3) storeId alone (provider storeId OR legacy top-level)
+  const docs = await storeModel
+    .find({
+      isActive: true,
+      $or: [
+        { "provider.storeId": storeIdStr },
+        { "providers.storeId": storeIdStr },
+        { storeId: storeIdStr }, // legacy
+      ],
+    })
+    .select({ _id: 1 })
+    .lean();
+
+  if (!docs?.length) return null;
+  if (docs.length === 1) return docs[0]._id;
+
+  // ambiguous: return $in for list queries (caller may use it)
+  return { $in: docs.map((d) => d._id) };
+}
+
+/**
+ * Apply store filter from query:
+ * supports:
+ * - store (ObjectId) already in filter => keep
+ * - storeId (ObjectId OR provider storeId)
+ * - provider (optional) + storeId
+ * - provider only => all stores for provider
+ *
+ * Returns: { empty: true } when store not found.
+ */
+async function applyProviderAndStoreFilter(normalizedFilter, pageNumber, limitNumber) {
+  if (!normalizedFilter || typeof normalizedFilter !== "object") {
+    return { ok: true };
+  }
+
+  // if already filtered by store, do nothing
+  if (normalizedFilter.store) return { ok: true };
+
+  const provider =
+    normalizedFilter.provider ??
+    normalizedFilter.providerName ??
+    normalizedFilter.provider_name;
+
+  const storeIdRaw =
+    normalizedFilter.storeId ??
+    normalizedFilter.providerStoreId ??
+    normalizedFilter.provider_store_id;
+
+  const providerName = normProvider(provider);
+  const storeIdStr = toStr(storeIdRaw);
+
+  // remove non-schema filter keys so they don't affect category search
+  if (normalizedFilter.provider !== undefined) delete normalizedFilter.provider;
+  if (normalizedFilter.providerName !== undefined) delete normalizedFilter.providerName;
+  if (normalizedFilter.provider_name !== undefined) delete normalizedFilter.provider_name;
+
+  if (normalizedFilter.storeId !== undefined) delete normalizedFilter.storeId;
+  if (normalizedFilter.providerStoreId !== undefined) delete normalizedFilter.providerStoreId;
+  if (normalizedFilter.provider_store_id !== undefined) delete normalizedFilter.provider_store_id;
+
+  // A) storeId provided
+  if (storeIdStr) {
+    // allow multi store ids: storeId=1,2,3 (each can be ObjectId or provider storeId)
+    const vals = parseMulti(storeIdStr).filter((x) => toStr(x).toLowerCase() !== "all");
+
+    // if only one => resolve normally
+    if (vals.length <= 1) {
+      const resolved = await resolveStoreId({
+        storeId: vals[0] || storeIdStr,
+        provider: providerName || null,
+      });
+
+      if (!resolved) return { empty: true, response: emptyList(pageNumber, limitNumber) };
+
+      normalizedFilter.store = resolved;
+      return { ok: true };
+    }
+
+    // multi => resolve each (best effort) then $in
+    const resolvedIds = [];
+    for (const v of vals) {
+      const resolved = await resolveStoreId({
+        storeId: v,
+        provider: providerName || null,
+      });
+      if (resolved && resolved.$in && Array.isArray(resolved.$in)) {
+        resolvedIds.push(...resolved.$in);
+      } else if (resolved) {
+        resolvedIds.push(resolved);
+      }
+    }
+
+    const uniq = Array.from(
+      new Set(resolvedIds.map((x) => String(x)))
+    ).map((s) => new mongoose.Types.ObjectId(s));
+
+    if (!uniq.length) return { empty: true, response: emptyList(pageNumber, limitNumber) };
+
+    normalizedFilter.store = { $in: uniq };
+    return { ok: true };
+  }
+
+  // B) provider ONLY => store in all stores of provider
+  if (providerName) {
+    const stores = await storeModel
+      .find({
+        isActive: true,
+        $or: [{ "provider.name": providerName }, { "providers.name": providerName }],
+      })
+      .select({ _id: 1 })
+      .lean();
+
+    if (!stores?.length) return { empty: true, response: emptyList(pageNumber, limitNumber) };
+
+    normalizedFilter.store = { $in: stores.map((s) => s._id) };
+    return { ok: true };
+  }
+
+  return { ok: true };
 }
 
 /**
@@ -52,12 +233,7 @@ async function resolveStoreId({ store, storeId }) {
  * - If both are empty => skip (allowed).
  * - If one is provided, check only that one.
  */
-async function ensureUniqueNamesPerStore({
-  store,
-  nameEn,
-  nameAr,
-  excludeId = null,
-}) {
+async function ensureUniqueNamesPerStore({ store, nameEn, nameAr, excludeId = null }) {
   const conditions = [];
 
   if (nameEn) {
@@ -74,18 +250,12 @@ async function ensureUniqueNamesPerStore({
 
   if (!conditions.length) return;
 
-  const filter = {
-    store,
-    $or: conditions,
-  };
-
+  const filter = { store, $or: conditions };
   if (excludeId) filter._id = { $ne: excludeId };
 
   const existing = await categoryModel.findOne(filter).select({ _id: 1 }).lean();
   if (existing) {
-    throw new ConflictException(
-      "Category with this name already exists for this store"
-    );
+    throw new ConflictException("Category with this name already exists for this store");
   }
 }
 
@@ -97,13 +267,14 @@ exports.createCategory = async (categoryData = {}) => {
   const store = await resolveStoreId({
     store: categoryData.store,
     storeId: categoryData.storeId,
+    provider: categoryData.provider || categoryData.providerName,
   });
 
   if (!store) {
     return {
       success: false,
       code: 400,
-      message: "store (ObjectId) or storeId is required",
+      message: "store (ObjectId) or storeId (+ optional provider) is required",
     };
   }
 
@@ -124,6 +295,7 @@ exports.createCategory = async (categoryData = {}) => {
 
   return { success: true, code: 201, result: doc };
 };
+
 exports.listCategories = async (
   filterObject,
   selectionObject = {},
@@ -140,16 +312,9 @@ exports.listCategories = async (
     defaultSort: "createdAt",
   });
 
-  if (normalizedFilter?.storeId) {
-    const resolved = await resolveStoreId({ storeId: normalizedFilter.storeId });
-    delete normalizedFilter.storeId;
-
-    if (!resolved) {
-      return { success: true, code: 200, result: [], count: 0, page: pageNumber, limit: limitNumber };
-    }
-
-    normalizedFilter.store = resolved;
-  }
+  // ✅ NEW: handle provider + storeId filtering (storeId can be ObjectId OR provider storeId)
+  const storeRes = await applyProviderAndStoreFilter(normalizedFilter, pageNumber, limitNumber);
+  if (storeRes?.empty) return storeRes.response;
 
   const finalFilter = applySearchFilter(normalizedFilter, [
     "nameEn",
@@ -158,15 +323,16 @@ exports.listCategories = async (
     "descriptionAr",
   ]);
 
-
   const ensureStoreSelected = (sel = {}) => {
     if (!sel || Object.keys(sel).length === 0) return sel;
 
     const values = Object.values(sel).map((v) => Number(v));
     const isIncludeMode = values.some((v) => v === 1);
 
+    // include-mode => ensure store exists for populate
     if (isIncludeMode) return { ...sel, store: 1 };
 
+    // exclude-mode => if store explicitly excluded, remove exclusion so populate works
     if (Number(sel.store) === 0) {
       const copy = { ...sel };
       delete copy.store;
@@ -178,9 +344,15 @@ exports.listCategories = async (
 
   const safeSelection = ensureStoreSelected(selectionObject);
 
-  let query = categoryModel
+  const query = categoryModel
     .find(finalFilter)
-    .populate("store", "businessName storeId logo")
+    .populate({
+      path: "store",
+      // ✅ IMPORTANT: storeId غالبًا nested (provider.storeId/providers.storeId)
+      // رجّع provider/providers عشان الـ UI يعرف يطلع storeId + provider name
+      select: "businessName domain logo storeId provider providers isActive",
+      match: { isActive: true },
+    })
     .select(safeSelection)
     .sort(normalizedSort)
     .limit(limitNumber)
@@ -201,11 +373,14 @@ exports.listCategories = async (
   };
 };
 
-
-
 exports.getCategory = async (categoryId) => {
   let query = categoryModel.findById(categoryId);
-    query = query.populate("store", "businessName storeId logo");
+
+  query = query.populate({
+    path: "store",
+    select: "businessName domain logo storeId provider providers isActive",
+    match: { isActive: true },
+  });
 
   const doc = await query.lean();
   if (!doc) return { success: false, code: 404, message: "Category not found" };
@@ -213,15 +388,8 @@ exports.getCategory = async (categoryId) => {
   return { success: true, code: 200, result: doc };
 };
 
-
-
-
 exports.updateCategory = async (categoryId, body = {}) => {
-  const updated = await categoryModel.findByIdAndUpdate(
-    categoryId,
-    body,              
-    { new: true }
-  );
+  const updated = await categoryModel.findByIdAndUpdate(categoryId, body, { new: true });
 
   if (!updated) {
     throw new NotFoundException("errors.category_not_found");
@@ -234,11 +402,7 @@ exports.updateCategory = async (categoryId, body = {}) => {
   };
 };
 
-
-
-
 exports.deleteCategory = async (_id, permanent = false) => {
-
   // ✅ only true triggers permanent delete
   if (permanent) {
     const deleted = await categoryModel.findByIdAndDelete(_id).lean();
@@ -249,7 +413,8 @@ exports.deleteCategory = async (_id, permanent = false) => {
     // best effort remove images folder
     try {
       const categoryDir = path.join(PUBLIC_DIR, "images", "categories", String(_id));
-      if (fs.existsSync(categoryDir)) fs.rmSync(categoryDir, { recursive: true, force: true });
+      if (fs.existsSync(categoryDir))
+        fs.rmSync(categoryDir, { recursive: true, force: true });
     } catch (_) {}
 
     return { success: true, code: 200, message: "success.record_deleted" };
@@ -270,7 +435,6 @@ exports.deleteCategory = async (_id, permanent = false) => {
 
   return { success: true, code: 200, message: "success.record_disabled" };
 };
-
 
 /* ---------------------------
   Image Upload (STRING) + Remove (separate endpoint)

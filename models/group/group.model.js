@@ -1,16 +1,26 @@
-// models/group/group.model.js
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
+/* =========================================================
+   UTIL: Calculate collectedAmount
+========================================================= */
+
 const calcCollectedAmount = (contributors = []) => {
   if (!Array.isArray(contributors)) return 0;
+
   return contributors.reduce((sum, c) => {
     const ok = c?.transactionStatus === true;
     const amt = Number(c?.paidAmount ?? 0);
+
     if (!ok || !Number.isFinite(amt) || amt <= 0) return sum;
+
     return sum + amt;
   }, 0);
 };
+
+/* =========================================================
+   SCHEMA
+========================================================= */
 
 const groupSchema = new Schema(
   {
@@ -18,20 +28,40 @@ const groupSchema = new Schema(
     description: { type: String, default: "", trim: true },
     image: { type: String, default: "" },
 
-    product: { type: Schema.Types.ObjectId, ref: "products", required: true, index: true },
-    store: { type: Schema.Types.ObjectId, ref: "stores", required: true, index: true },
+    product: {
+      type: Schema.Types.ObjectId,
+      ref: "products",
+      required: true,
+      index: true,
+    },
+
+    store: {
+      type: Schema.Types.ObjectId,
+      ref: "stores",
+      required: true,
+      index: true,
+    },
 
     targetAmount: { type: Number, required: true, min: 0 },
 
-    // ✅ will be auto-calculated
     collectedAmount: { type: Number, default: 0, min: 0 },
 
-    creator: { type: Schema.Types.ObjectId, ref: "Client", required: true, index: true },
+    creator: {
+      type: Schema.Types.ObjectId,
+      ref: "Client",
+      required: true,
+      index: true,
+    },
 
     contributors: {
       type: [
         {
-          client: { type: Schema.Types.ObjectId, ref: "Client", required: true, index: true },
+          client: {
+            type: Schema.Types.ObjectId,
+            ref: "Client",
+            required: true,
+            index: true,
+          },
           paidAmount: { type: Number, default: 0, min: 0 },
           paidAt: { type: Date, default: null },
           transactionStatus: { type: Boolean, default: false },
@@ -48,91 +78,118 @@ const groupSchema = new Schema(
       index: true,
     },
 
+    // 🔥 YallaPay Integration
+    providerOrderId: {
+      type: String,
+      default: "",
+      index: true,
+    },
+
+    purchaseLock: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    fundedAt: {
+      type: Date,
+      default: null,
+    },
+
+    purchasedAt: {
+      type: Date,
+      default: null,
+    },
+
     deadLine: { type: Date, default: null },
+
     isActive: { type: Boolean, default: true, index: true },
   },
-  { timestamps: true, versionKey: false }
+  {
+    timestamps: true,
+    versionKey: false,
+  }
 );
 
-/* =========================
-   ✅ PERFECT INDEXES
-   ========================= */
+/* =========================================================
+   INDEXES (Optimized for Production)
+========================================================= */
 
-// 1) Store page / dashboard filters
 groupSchema.index({ store: 1, status: 1 });
-
-// 2) Product page filters
 groupSchema.index({ product: 1, status: 1 });
-
-// 3) ✅ Cron job: close expired active groups fast
-// query: { status:"active", isActive:true, deadLine:{$lte: now} }
 groupSchema.index({ status: 1, isActive: 1, deadLine: 1 });
-
-// 4) (Optional but recommended) My groups / admin list by creator
-// Often used with sorting by newest
 groupSchema.index({ creator: 1, status: 1, createdAt: -1 });
+groupSchema.index({ providerOrderId: 1 });
 
-/* ---------------- AUTO CALC collectedAmount ---------------- */
+/* =========================================================
+   AUTO CALC collectedAmount (CREATE / SAVE)
+========================================================= */
 
-// create/save
 groupSchema.pre("save", function (next) {
   this.collectedAmount = calcCollectedAmount(this.contributors);
+
+  // 🔥 Auto move to funded
+  if (
+    this.collectedAmount >= this.targetAmount &&
+    this.status === "active"
+  ) {
+    this.status = "funded";
+    this.fundedAt = new Date();
+  }
+
   next();
 });
 
-// updates via findOneAndUpdate / updateOne / etc
+/* =========================================================
+   AUTO CALC collectedAmount (UPDATE OPERATIONS)
+========================================================= */
+
 const applyCollectedInUpdate = async function (next) {
   const update = this.getUpdate() || {};
   const $set = update.$set || {};
   const $unset = update.$unset || {};
 
-  // if someone tries to set/unset collectedAmount manually -> ignore it
+  // prevent manual override
   delete update.collectedAmount;
   delete $set.collectedAmount;
   delete $unset.collectedAmount;
 
-  // only recalc if contributors is being changed
-  const incomingContrib =
-    update.contributors ??
-    $set.contributors ??
-    (update.$push?.contributors ? null : null);
-
-  // If $push/$pull is used, we need to fetch final doc to recalc safely
   const usesAtomic =
-    !!update.$push?.contributors || !!update.$pull?.contributors || !!update.$addToSet?.contributors;
-
-  if (incomingContrib !== undefined && incomingContrib !== null && !usesAtomic) {
-    const newValue = calcCollectedAmount(incomingContrib);
-    update.$set = { ...$set, collectedAmount: newValue };
-    this.setUpdate(update);
-    return next();
-  }
+    !!update.$push?.contributors ||
+    !!update.$pull?.contributors ||
+    !!update.$addToSet?.contributors;
 
   if (usesAtomic) {
     const doc = await this.model.findOne(this.getQuery()).lean();
-    const current = doc?.contributors || [];
+    if (!doc) return next();
 
-    let final = current;
+    let final = doc.contributors || [];
 
     if (update.$pull?.contributors) {
       const cond = update.$pull.contributors;
       if (cond?.client) {
-        final = final.filter((c) => String(c.client) !== String(cond.client));
+        final = final.filter(
+          (c) => String(c.client) !== String(cond.client)
+        );
       }
     }
 
     if (update.$push?.contributors) {
       const pushed = update.$push.contributors;
-      if (pushed?.$each && Array.isArray(pushed.$each)) final = [...final, ...pushed.$each];
+      if (pushed?.$each && Array.isArray(pushed.$each))
+        final = [...final, ...pushed.$each];
       else if (pushed) final = [...final, pushed];
     }
 
     if (update.$addToSet?.contributors) {
       const item = update.$addToSet.contributors;
-      const arr = item?.$each && Array.isArray(item.$each) ? item.$each : [item];
-      const seen = new Set(final.map((c) => String(c.client?._id || c.client)));
+      const arr =
+        item?.$each && Array.isArray(item.$each) ? item.$each : [item];
+
+      const seen = new Set(final.map((c) => String(c.client)));
+
       arr.forEach((x) => {
-        const k = String(x?.client?._id || x?.client || "");
+        const k = String(x?.client || "");
         if (k && !seen.has(k)) {
           final.push(x);
           seen.add(k);
@@ -141,7 +198,18 @@ const applyCollectedInUpdate = async function (next) {
     }
 
     const newValue = calcCollectedAmount(final);
-    update.$set = { ...$set, collectedAmount: newValue };
+
+    update.$set = {
+      ...$set,
+      collectedAmount: newValue,
+    };
+
+    // 🔥 Auto funded on update
+    if (newValue >= doc.targetAmount && doc.status === "active") {
+      update.$set.status = "funded";
+      update.$set.fundedAt = new Date();
+    }
+
     this.setUpdate(update);
     return next();
   }
@@ -153,5 +221,9 @@ const applyCollectedInUpdate = async function (next) {
 groupSchema.pre("findOneAndUpdate", applyCollectedInUpdate);
 groupSchema.pre("updateOne", applyCollectedInUpdate);
 groupSchema.pre("updateMany", applyCollectedInUpdate);
+
+/* =========================================================
+   EXPORT
+========================================================= */
 
 module.exports = mongoose.model("groups", groupSchema);

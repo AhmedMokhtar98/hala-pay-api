@@ -1,16 +1,20 @@
 const mongoose = require("mongoose");
 
-const categorySchema = new mongoose.Schema(
-  {
-    store: { type: mongoose.Schema.Types.ObjectId, ref: "stores", required: true, index: true, },
-    nameEn: { type: String, default: "" },
-    nameAr: { type: String, default: "" },
-    descriptionEn: { type: String, default: "" },
-    descriptionAr: { type: String, default: "" },
-    image: { type: String, default: "" },
-    isActive: { type: Boolean, default: true },
-  },
-  { timestamps: true }
-);
+const categorySchema = new mongoose.Schema({
+  store: { type: mongoose.Schema.Types.ObjectId, ref: "stores", index: true },
 
+  provider: { type: String, required: true, index: true },
+  providerCategoryId: { type: String, index: true },
+
+  nameEn: String,
+  nameAr: String,
+  image: String,
+
+  isActive: { type: Boolean, default: true },
+}, { timestamps: true });
+
+categorySchema.index(
+  { store: 1, provider: 1, providerCategoryId: 1 },
+  { unique: true }
+);
 module.exports = mongoose.model("categories", categorySchema);
