@@ -14,6 +14,7 @@ const {
 const groupModel = require("./group.model");
 const productModel = require("../product/product.model"); // adjust if needed
 const { generateGroupInviteToken, verifyGroupInviteToken } = require("../../helpers/jwt.helper");
+const { normalizeAssetUrl } = require("../../helpers/url.helper");
 
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 
@@ -144,7 +145,6 @@ exports.createGroup = async (payload = {}) => {
   const doc = await populateGroupQuery(groupModel.findById(created._id)).lean();
   return { success: true, code: 201, result: doc };
 };
-
 /**
  * listGroups (client)
  * - returns only groups where client is creator OR contributor
@@ -173,7 +173,16 @@ exports.listGroups = async (clientId, filterObject = {}, selectionObject = {}, s
     const values = Object.values(sel).map((v) => Number(v));
     const isIncludeMode = values.some((v) => v === 1);
 
-    if (isIncludeMode) return { ...sel, store: 1, product: 1, contributors: 1, creator: 1 };
+    if (isIncludeMode) {
+      return {
+        ...sel,
+        store: 1,
+        product: 1,
+        contributors: 1,
+        creator: 1,
+      };
+    }
+
     return sel;
   };
 
@@ -193,7 +202,63 @@ exports.listGroups = async (clientId, filterObject = {}, selectionObject = {}, s
     groupModel.countDocuments(finalFilter),
   ]);
 
-  return { success: true, code: 200, result: groups, count, page: pageNumber, limit: limitNumber };
+  const normalizeImagesArray = (arr) =>
+    Array.isArray(arr) ? arr.map((img) => normalizeAssetUrl(img)) : arr;
+
+  const normalizeParticipant = (item) => {
+    if (!item || typeof item !== "object") return item;
+
+    return {
+      ...item,
+      image: normalizeAssetUrl(item.image),
+      avatar: normalizeAssetUrl(item.avatar),
+      logo: normalizeAssetUrl(item.logo),
+      images: normalizeImagesArray(item.images),
+    };
+  };
+
+  const normalizedGroups = groups.map((group) => ({
+    ...group,
+
+    image: normalizeAssetUrl(group.image),
+    logo: normalizeAssetUrl(group.logo),
+    images: normalizeImagesArray(group.images),
+
+    store: group.store
+      ? {
+          ...group.store,
+          logo: normalizeAssetUrl(group.store.logo),
+          image: normalizeAssetUrl(group.store.image),
+          images: normalizeImagesArray(group.store.images),
+        }
+      : group.store,
+
+    product: group.product
+      ? {
+          ...group.product,
+          image: normalizeAssetUrl(group.product.image),
+          logo: normalizeAssetUrl(group.product.logo),
+          images: normalizeImagesArray(group.product.images),
+          mainImage: normalizeAssetUrl(group.product.mainImage),
+          thumbnail: normalizeAssetUrl(group.product.thumbnail),
+        }
+      : group.product,
+
+    creator: group.creator ? normalizeParticipant(group.creator) : group.creator,
+
+    contributors: Array.isArray(group.contributors)
+      ? group.contributors.map(normalizeParticipant)
+      : group.contributors,
+  }));
+
+  return {
+    success: true,
+    code: 200,
+    result: normalizedGroups,
+    count,
+    page: pageNumber,
+    limit: limitNumber,
+  };
 };
 
 /**
@@ -208,7 +273,61 @@ exports.getGroup = async (clientId, groupId) => {
   ).lean();
 
   if (!doc) throw new NotFoundException("errors.group_not_found");
-  return { success: true, code: 200, result: doc };
+
+  const normalizeImagesArray = (arr) =>
+    Array.isArray(arr) ? arr.map((img) => normalizeAssetUrl(img)) : arr;
+
+  const normalizeParticipant = (item) => {
+    if (!item || typeof item !== "object") return item;
+
+    return {
+      ...item,
+      image: normalizeAssetUrl(item.image),
+      avatar: normalizeAssetUrl(item.avatar),
+      logo: normalizeAssetUrl(item.logo),
+      images: normalizeImagesArray(item.images),
+    };
+  };
+
+  const normalizedGroup = {
+    ...doc,
+
+    image: normalizeAssetUrl(doc.image),
+    logo: normalizeAssetUrl(doc.logo),
+    images: normalizeImagesArray(doc.images),
+
+    store: doc.store
+      ? {
+          ...doc.store,
+          logo: normalizeAssetUrl(doc.store.logo),
+          image: normalizeAssetUrl(doc.store.image),
+          images: normalizeImagesArray(doc.store.images),
+        }
+      : doc.store,
+
+    product: doc.product
+      ? {
+          ...doc.product,
+          image: normalizeAssetUrl(doc.product.image),
+          logo: normalizeAssetUrl(doc.product.logo),
+          images: normalizeImagesArray(doc.product.images),
+          mainImage: normalizeAssetUrl(doc.product.mainImage),
+          thumbnail: normalizeAssetUrl(doc.product.thumbnail),
+        }
+      : doc.product,
+
+    creator: doc.creator ? normalizeParticipant(doc.creator) : doc.creator,
+
+    contributors: Array.isArray(doc.contributors)
+      ? doc.contributors.map(normalizeParticipant)
+      : doc.contributors,
+  };
+
+  return {
+    success: true,
+    code: 200,
+    result: normalizedGroup,
+  };
 };
 
 /**
