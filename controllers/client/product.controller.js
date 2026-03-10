@@ -1,6 +1,6 @@
 // controllers/admin/product.controller.js
 const productRepo = require("../../models/product/product.repo");
-const { listUnifiedProducts, getProductFromDbById } = require("../../providers/services/products/unifiedProducts.service");
+const { listUnifiedProducts, getProductFromDbById, getUnifiedProductById } = require("../../providers/services/products/unifiedProducts.service");
 
 
 exports.listProducts = async (req, res) => {
