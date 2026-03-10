@@ -8,75 +8,156 @@ const objectId = Joi.string()
     "string.pattern.base": "errors.invalidObjectId",
   });
 
-const storeId9 = Joi.string()
-  .pattern(/^\d{9}$/)
+const objectIdOrNull = Joi.alternatives()
+  .try(objectId, Joi.valid(null))
   .messages({
-    "string.base": "errors.validStoreId",
-    "string.pattern.base": "errors.storeIdMustBe9Digits",
+    "string.base": "errors.validObjectId",
+    "string.pattern.base": "errors.invalidObjectId",
   });
 
-const boolQuery = Joi.boolean()
+const boolValue = Joi.boolean()
   .truthy("true", "1")
   .falsy("false", "0")
   .messages({
     "boolean.base": "errors.validBoolean",
   });
 
+const stringAllowEmpty = Joi.string().trim().allow("");
+
+const priceSchemaValidation = Joi.object({
+  amount: Joi.number().min(0).optional().messages({
+    "number.base": "errors.validPrice",
+    "number.min": "errors.validPrice",
+  }),
+  currency: Joi.string().trim().min(1).optional().messages({
+    "string.base": "errors.validCurrency",
+    "string.empty": "errors.validCurrency",
+  }),
+});
+
+const productCategoryValidation = Joi.object({
+  providerCategoryId: stringAllowEmpty.optional(),
+  name: stringAllowEmpty.optional(),
+  nameEn: stringAllowEmpty.optional(),
+  nameAr: stringAllowEmpty.optional(),
+  categoryRef: objectIdOrNull.optional(),
+});
+
+const variantValidation = Joi.object({
+  providerVariantId: stringAllowEmpty.optional(),
+  sku: stringAllowEmpty.optional(),
+  name: stringAllowEmpty.optional(),
+
+  price: priceSchemaValidation.optional(),
+  compareAtPrice: priceSchemaValidation.optional(),
+
+  stock: Joi.number().min(0).optional().messages({
+    "number.base": "errors.validStock",
+    "number.min": "errors.validStock",
+  }),
+  unlimited: boolValue.optional(),
+  isAvailable: boolValue.optional(),
+
+  options: Joi.any().optional(),
+});
+
+const ratingValidation = Joi.object({
+  count: Joi.number().min(0).optional().messages({
+    "number.base": "errors.validRatingCount",
+    "number.min": "errors.validRatingCount",
+  }),
+  rate: Joi.number().min(0).optional().messages({
+    "number.base": "errors.validRatingRate",
+    "number.min": "errors.validRatingRate",
+  }),
+});
+
+const urlsValidation = Joi.object({
+  admin: stringAllowEmpty.optional(),
+  customer: stringAllowEmpty.optional(),
+  product_card: stringAllowEmpty.optional(),
+});
+
+const createOrUpdateBodySchema = Joi.object({
+  store: objectId.optional().messages({
+    "string.base": "errors.validStoreId",
+    "string.pattern.base": "errors.invalidStoreId",
+  }),
+
+  provider: Joi.string().trim().min(1).optional().messages({
+    "string.base": "errors.validProvider",
+    "string.empty": "errors.validProvider",
+  }),
+  providerProductId: stringAllowEmpty.optional(),
+
+  name: stringAllowEmpty.optional().messages({
+    "string.base": "errors.validProductName",
+  }),
+  description: Joi.string().allow("").optional().messages({
+    "string.base": "errors.validProductDescription",
+  }),
+
+  images: Joi.array().items(Joi.string().trim()).optional().messages({
+    "array.base": "errors.validProductImages",
+  }),
+  mainImage: stringAllowEmpty.optional().messages({
+    "string.base": "errors.validImageUrl",
+  }),
+  thumbnail: stringAllowEmpty.optional().messages({
+    "string.base": "errors.validImageUrl",
+  }),
+
+  priceBefore: priceSchemaValidation.optional(),
+  price: priceSchemaValidation.optional(),
+  salePrice: priceSchemaValidation.optional(),
+
+  stock: Joi.number().min(0).optional().messages({
+    "number.base": "errors.validStock",
+    "number.min": "errors.validStock",
+  }),
+
+  unlimited: boolValue.optional(),
+  isAvailable: boolValue.optional(),
+  isActive: boolValue.optional(),
+
+  status: stringAllowEmpty.optional(),
+  sku: stringAllowEmpty.optional(),
+
+  categories: Joi.array().items(productCategoryValidation).optional().messages({
+    "array.base": "errors.validCategories",
+  }),
+
+  variants: Joi.array().items(variantValidation).optional().messages({
+    "array.base": "errors.validVariants",
+  }),
+
+  rating: ratingValidation.optional(),
+
+  discount: Joi.number().min(0).optional().messages({
+    "number.base": "errors.validDiscount",
+    "number.min": "errors.validDiscount",
+  }),
+
+  urls: urlsValidation.optional(),
+
+  weight: Joi.number().min(0).optional().messages({
+    "number.base": "errors.validWeight",
+    "number.min": "errors.validWeight",
+  }),
+
+  weightUnit: stringAllowEmpty.optional(),
+
+  raw: Joi.any().optional(),
+});
+
 module.exports = {
   createProductValidation: {
     params: Joi.object({}).unknown(true),
     query: Joi.object({}).unknown(true),
-    body: Joi.object({
-      store: objectId.optional(),
-      storeId: storeId9.optional(),
-
-      category: objectId.required().messages({
-        "string.base": "errors.validCategoryId",
-        "string.pattern.base": "errors.invalidCategoryId",
-        "any.required": "errors.requiredCategoryId",
-      }),
-
-      name: Joi.string().trim().min(1).required().messages({
-        "string.base": "errors.validProductName",
-        "string.min": "errors.productNameMin",
-        "any.required": "errors.requiredProductName",
-      }),
-
-      description: Joi.string().allow("").optional().messages({
-        "string.base": "errors.validProductDescription",
-      }),
-
-      images: Joi.array().items(Joi.string().trim()).optional().messages({
-        "array.base": "errors.validProductImages",
-      }),
-
-      priceBefore: Joi.number().min(0).optional().messages({
-        "number.base": "errors.validPriceBefore",
-        "number.min": "errors.validPriceBefore",
-      }),
-
-      price: Joi.number().min(0).optional().messages({
-        "number.base": "errors.validPrice",
-        "number.min": "errors.validPrice",
-      }),
-
-      stock: Joi.number().integer().min(0).optional().messages({
-        "number.base": "errors.validStock",
-        "number.integer": "errors.validStock",
-        "number.min": "errors.validStock",
-      }),
-
-      discount: Joi.number().min(0).max(100).optional().messages({
-        "number.base": "errors.validDiscount",
-        "number.min": "errors.validDiscount",
-        "number.max": "errors.validDiscount",
-      }),
-
-      isActive: boolQuery.optional(),
-    })
-      .or("store", "storeId")
+    body: createOrUpdateBodySchema
+      .fork(["store", "provider"], (schema) => schema.required())
       .messages({
-        "object.missing": "errors.requiredStoreOrStoreId",
+        "any.required": "errors.requiredField",
       }),
   },
 
@@ -85,9 +166,19 @@ module.exports = {
     body: Joi.object({}).unknown(true),
     query: Joi.object({
       store: objectId.optional(),
-      storeId: storeId9.optional(),
-      category: objectId.optional(),
-      isActive: boolQuery.optional(),
+      provider: Joi.string().trim().optional(),
+      providerProductId: Joi.string().trim().optional(),
+
+      // for filtering nested categories
+      categoryRef: objectId.optional(),
+      category: objectId.optional(), // alias if your controller still uses "category"
+
+      isActive: boolValue.optional(),
+      isAvailable: boolValue.optional(),
+      unlimited: boolValue.optional(),
+
+      status: Joi.string().trim().optional(),
+      sku: Joi.string().trim().optional(),
 
       page: Joi.number().integer().min(1).optional(),
       limit: Joi.number().integer().min(1).max(200).optional(),
@@ -97,11 +188,12 @@ module.exports = {
       keyword: Joi.string().allow("").optional(),
 
       sort: Joi.string().allow("").optional(),
-      populate: boolQuery.optional(),
+      populate: boolValue.optional(),
 
       minPrice: Joi.number().min(0).optional(),
       maxPrice: Joi.number().min(0).optional(),
-      minStock: Joi.number().integer().min(0).optional(),
+      minStock: Joi.number().min(0).optional(),
+      maxStock: Joi.number().min(0).optional(),
     }).unknown(true),
   },
 
@@ -122,58 +214,15 @@ module.exports = {
         "any.required": "errors.requiredProductId",
       }),
     }),
-    body: Joi.object({
-      store: objectId.optional(),
-      storeId: storeId9.optional(),
-      category: objectId.optional(),
-
-      name: Joi.string().trim().min(1).optional().messages({
-        "string.base": "errors.validProductName",
-        "string.min": "errors.productNameMin",
-      }),
-
-      description: Joi.string().allow("").optional().messages({
-        "string.base": "errors.validProductDescription",
-      }),
-
-      images: Joi.array().items(Joi.string().trim()).optional().messages({
-        "array.base": "errors.validProductImages",
-      }),
-
-      priceBefore: Joi.number().min(0).optional().messages({
-        "number.base": "errors.validPriceBefore",
-        "number.min": "errors.validPriceBefore",
-      }),
-
-      price: Joi.number().min(0).optional().messages({
-        "number.base": "errors.validPrice",
-        "number.min": "errors.validPrice",
-      }),
-
-      stock: Joi.number().integer().min(0).optional().messages({
-        "number.base": "errors.validStock",
-        "number.integer": "errors.validStock",
-        "number.min": "errors.validStock",
-      }),
-
-      discount: Joi.number().min(0).max(100).optional().messages({
-        "number.base": "errors.validDiscount",
-        "number.min": "errors.validDiscount",
-        "number.max": "errors.validDiscount",
-      }),
-
-      isActive: boolQuery.optional(),
-    })
-      .min(1)
-      .messages({
-        "object.min": "errors.emptyBody",
-      }),
+    body: createOrUpdateBodySchema.min(1).messages({
+      "object.min": "errors.emptyBody",
+    }),
   },
 
   deleteProductValidation: {
     body: Joi.object({}).unknown(true),
     query: Joi.object({
-      deletePermanently: boolQuery.optional(),
+      deletePermanently: boolValue.optional(),
     }).unknown(true),
     params: Joi.object({
       productId: objectId.required().messages({
@@ -182,7 +231,6 @@ module.exports = {
     }),
   },
 
-  // ✅ upload multiple images: PUT /products/images?productId=...
   uploadProductImagesValidation: {
     params: Joi.object({}).unknown(true),
     body: Joi.object({}).unknown(true),
@@ -193,7 +241,6 @@ module.exports = {
     }),
   },
 
-  // ✅ remove one image: PUT /products/images/remove?productId=...&imageUrl=...
   removeProductImageValidation: {
     params: Joi.object({}).unknown(true),
     body: Joi.object({}).unknown(true),
@@ -208,7 +255,6 @@ module.exports = {
     }),
   },
 
-  // ✅ clear all images: PUT /products/images/clear?productId=...
   clearProductImagesValidation: {
     params: Joi.object({}).unknown(true),
     body: Joi.object({}).unknown(true),

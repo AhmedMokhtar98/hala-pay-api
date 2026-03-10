@@ -1,7 +1,7 @@
 // controllers/admin/product.controller.js
 const productRepo = require("../../models/product/product.repo");
 // controllers/unifiedProducts.controller.js
-const { listUnifiedProducts } = require("../../providers/services/products/unifiedProducts.service");
+const { listUnifiedProducts, getUnifiedProductById } = require("../../providers/services/products/unifiedProducts.service");
 
 
 exports.createProduct = async (req, res) => {
@@ -28,10 +28,17 @@ exports.listProducts = async (req, res) => {
 };
 
 
+
 exports.getProductDetails = async (req, res) => {
   const { productId } = req.params;
 
-  const operationResultObject = await productRepo.getProduct(productId);
+  const operationResultObject = await getUnifiedProductById({
+    productId,
+    providerStoreId: req.query.storeId || req.query.providerStoreId,
+    filters: req.query,
+    store: req.store,
+  });
+
   return res.status(operationResultObject.code).json(operationResultObject);
 };
 

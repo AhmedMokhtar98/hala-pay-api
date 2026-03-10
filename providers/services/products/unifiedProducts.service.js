@@ -186,13 +186,13 @@ function applyProviderFilterToQuery(query, filters) {
   }
   return { $and: [query, cond] };
 }
+
 /* ======================================================
    CATEGORY FILTERING (SMART LOOSE MATCH)
    - one word   => partial contains match
    - multi word => all words must exist in the SAME category item
    - english words are token-aware, so "mens" won't match "womens"
 ====================================================== */
-
 function splitSearchTerms(value) {
   const s = toStr(value)
     .replace(/[_\-./\\]+/g, " ")
@@ -225,11 +225,7 @@ function buildCategoryElemMatch(terms = []) {
     $and: terms.map((term) => {
       const rx = regexSmart(term);
       return {
-        $or: [
-          { name: rx },
-          { nameEn: rx },
-          { nameAr: rx },
-        ],
+        $or: [{ name: rx }, { nameEn: rx }, { nameAr: rx }],
       };
     }),
   };
@@ -253,10 +249,7 @@ function buildCategoryLookupQuery(terms = [], storeId = null, providerName = "")
     $and: terms.map((term) => {
       const rx = regexSmart(term);
       return {
-        $or: [
-          { nameEn: rx },
-          { nameAr: rx },
-        ],
+        $or: [{ nameEn: rx }, { nameAr: rx }],
       };
     }),
   };
@@ -352,6 +345,7 @@ async function applyCategoryFilterToQuery(query, filters, storeId = null, provid
 
   return { $and: [query, cond] };
 }
+
 /**
  * If provider adapter returns raw.categories only (no normalized categories[]),
  * build normalized categories for DB upsert.
@@ -375,6 +369,106 @@ function normalizeProviderCategoriesFromRaw(x) {
 }
 
 /* ======================================================
+   NORMALIZE PRODUCT DOC
+====================================================== */
+function normalizeProductDoc(p) {
+  if (!p) return p;
+
+  const cats = Array.isArray(p.categories) ? p.categories : [];
+  const rawCats = Array.isArray(p?.raw?.categories) ? p.raw.categories : [];
+
+  const normalizedStore = p.store ? normalizeFields(p.store, ["logo"]) : p.store;
+
+  const normalizedCategories = cats.map((cat) => {
+    const catRef = cat?.categoryRef ? normalizeFields(cat.categoryRef, ["image"]) : null;
+
+    const fallbackName =
+      toStr(catRef?.nameEn) ||
+      toStr(catRef?.nameAr) ||
+      toStr(cat?.nameEn) ||
+      toStr(cat?.nameAr) ||
+      toStr(cat?.name) ||
+      "—";
+
+    return {
+      ...cat,
+      categoryRef: catRef,
+      name: toStr(cat?.name) || fallbackName,
+      nameEn: toStr(cat?.nameEn) || toStr(catRef?.nameEn) || fallbackName,
+      nameAr:
+        toStr(cat?.nameAr) ||
+        toStr(catRef?.nameAr) ||
+        toStr(cat?.nameEn) ||
+        toStr(catRef?.nameEn) ||
+        fallbackName,
+    };
+  });
+
+  const firstNormalized = normalizedCategories[0] || null;
+  const catRef = firstNormalized?.categoryRef || null;
+  const rawCat = rawCats[0] || null;
+
+  const category =
+    catRef ||
+    (firstNormalized?.nameEn ||
+    firstNormalized?.nameAr ||
+    firstNormalized?.name ||
+    firstNormalized?.providerCategoryId
+      ? {
+          _id: null,
+          nameEn: firstNormalized?.nameEn || firstNormalized?.name || "—",
+          nameAr:
+            firstNormalized?.nameAr ||
+            firstNormalized?.nameEn ||
+            firstNormalized?.name ||
+            "—",
+          image: "",
+          providerCategoryId: firstNormalized?.providerCategoryId || "",
+        }
+      : rawCat?.name || rawCat?.id
+      ? {
+          _id: null,
+          nameEn: toStr(rawCat?.name) || "—",
+          nameAr: toStr(rawCat?.name) || "—",
+          image: "",
+          providerCategoryId: toStr(rawCat?.id) || "",
+        }
+      : null);
+
+  const normalizedCategory = category ? normalizeFields(category, ["image"]) : category;
+
+  const normalizedImages = Array.isArray(p.images)
+    ? p.images.map((img) => normalizeAssetUrl(img))
+    : p.images;
+
+  const categoryName =
+    normalizedCategory?.nameEn ||
+    normalizedCategory?.nameAr ||
+    firstNormalized?.nameEn ||
+    firstNormalized?.nameAr ||
+    firstNormalized?.name ||
+    toStr(rawCat?.name) ||
+    "—";
+
+  const categoryId =
+    (catRef?._id && String(catRef._id)) ||
+    (firstNormalized?.categoryRef && String(firstNormalized.categoryRef)) ||
+    "";
+
+  return {
+    ...p,
+    store: normalizedStore,
+    images: normalizedImages,
+    mainImage: normalizeAssetUrl(p.mainImage),
+    thumbnail: normalizeAssetUrl(p.thumbnail),
+    categories: normalizedCategories,
+    category: normalizedCategory,
+    categoryName,
+    categoryId,
+  };
+}
+
+/* ======================================================
    DB LIST
 ====================================================== */
 async function listProductsFromDb({ store, filters }) {
@@ -393,8 +487,7 @@ async function listProductsFromDb({ store, filters }) {
     storeId,
     providerName
   );
-console.log("products filters =", filters);
-console.log("products finalQuery =", JSON.stringify(finalQuery, null, 2));
+
   const mustHave = { store: 1, categories: 1, raw: 1 };
   const finalProjection = (() => {
     if (!projection || Object.keys(projection).length === 0) return projection;
@@ -430,111 +523,7 @@ console.log("products finalQuery =", JSON.stringify(finalQuery, null, 2));
     Products.countDocuments(finalQuery),
   ]);
 
-  const cleaned = (items || [])
-    .filter((p) => p.store)
-    .map((p) => {
-      const cats = Array.isArray(p.categories) ? p.categories : [];
-      const rawCats = Array.isArray(p?.raw?.categories) ? p.raw.categories : [];
-
-      const normalizedStore = p.store
-        ? normalizeFields(p.store, ["logo"])
-        : p.store;
-
-      const normalizedCategories = cats.map((cat) => {
-        const catRef = cat?.categoryRef
-          ? normalizeFields(cat.categoryRef, ["image"])
-          : null;
-
-        const fallbackName =
-          toStr(catRef?.nameEn) ||
-          toStr(catRef?.nameAr) ||
-          toStr(cat?.nameEn) ||
-          toStr(cat?.nameAr) ||
-          toStr(cat?.name) ||
-          "—";
-
-        return {
-          ...cat,
-          categoryRef: catRef,
-          name: toStr(cat?.name) || fallbackName,
-          nameEn: toStr(cat?.nameEn) || toStr(catRef?.nameEn) || fallbackName,
-          nameAr:
-            toStr(cat?.nameAr) ||
-            toStr(catRef?.nameAr) ||
-            toStr(cat?.nameEn) ||
-            toStr(catRef?.nameEn) ||
-            fallbackName,
-        };
-      });
-
-      const firstNormalized = normalizedCategories[0] || null;
-      const catRef = firstNormalized?.categoryRef || null;
-      const rawCat = rawCats[0] || null;
-
-      const category =
-        catRef ||
-        (firstNormalized?.nameEn ||
-        firstNormalized?.nameAr ||
-        firstNormalized?.name ||
-        firstNormalized?.providerCategoryId
-          ? {
-              _id: null,
-              nameEn:
-                firstNormalized?.nameEn ||
-                firstNormalized?.name ||
-                "—",
-              nameAr:
-                firstNormalized?.nameAr ||
-                firstNormalized?.nameEn ||
-                firstNormalized?.name ||
-                "—",
-              image: "",
-              providerCategoryId: firstNormalized?.providerCategoryId || "",
-            }
-          : rawCat?.name || rawCat?.id
-          ? {
-              _id: null,
-              nameEn: toStr(rawCat?.name) || "—",
-              nameAr: toStr(rawCat?.name) || "—",
-              image: "",
-              providerCategoryId: toStr(rawCat?.id) || "",
-            }
-          : null);
-
-      const normalizedCategory = category
-        ? normalizeFields(category, ["image"])
-        : category;
-
-      const normalizedImages = Array.isArray(p.images)
-        ? p.images.map((img) => normalizeAssetUrl(img))
-        : p.images;
-
-      const categoryName =
-        normalizedCategory?.nameEn ||
-        normalizedCategory?.nameAr ||
-        firstNormalized?.nameEn ||
-        firstNormalized?.nameAr ||
-        firstNormalized?.name ||
-        toStr(rawCat?.name) ||
-        "—";
-
-      const categoryId =
-        (catRef?._id && String(catRef._id)) ||
-        (firstNormalized?.categoryRef && String(firstNormalized.categoryRef)) ||
-        "";
-
-      return {
-        ...p,
-        store: normalizedStore,
-        images: normalizedImages,
-        mainImage: normalizeAssetUrl(p.mainImage),
-        thumbnail: normalizeAssetUrl(p.thumbnail),
-        categories: normalizedCategories,
-        category: normalizedCategory,
-        categoryName,
-        categoryId,
-      };
-    });
+  const cleaned = (items || []).filter((p) => p.store).map(normalizeProductDoc);
 
   return {
     success: true,
@@ -543,6 +532,58 @@ console.log("products finalQuery =", JSON.stringify(finalQuery, null, 2));
     count,
     page,
     limit,
+  };
+}
+
+/* ======================================================
+   GET PRODUCT BY DB _id
+====================================================== */
+async function getProductFromDbById({ productId, store, filters = {} }) {
+  const id = toStr(productId);
+  if (!isObjectId(id)) {
+    const err = new NotFoundException("Product not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const storeId = store?._id || null;
+  const providerName = normalizeProviderName(filters?.provider);
+
+  const query = {
+    _id: new mongoose.Types.ObjectId(id),
+    isActive: true,
+  };
+
+  if (storeId) query.store = storeId;
+  if (providerName) query.provider = providerName;
+
+  const categoryPopulateMatch = storeId
+    ? { isActive: true, store: storeId }
+    : { isActive: true };
+
+  const doc = await Products.findOne(query)
+    .populate({
+      path: "store",
+      select: "businessName domain provider providers isActive logo",
+      match: { isActive: true },
+    })
+    .populate({
+      path: "categories.categoryRef",
+      match: categoryPopulateMatch,
+      select: "nameEn nameAr image isActive",
+    })
+    .lean();
+
+  if (!doc || !doc.store) {
+    const err = new NotFoundException("Product not found");
+    err.status = 404;
+    throw err;
+  }
+
+  return {
+    success: true,
+    code: 200,
+    result: normalizeProductDoc(doc),
   };
 }
 
@@ -600,7 +641,7 @@ async function fetchProviderProductsPaged({ adapter, storeForAdapter, filters, m
 }
 
 /* ======================================================
-   MAIN ENTRY
+   MAIN ENTRY - LIST
 ====================================================== */
 async function listUnifiedProducts({ providerStoreId, filters = {}, store: storeFromReq }) {
   const providerNameFromQuery = normalizeProviderName(filters.provider);
@@ -702,8 +743,58 @@ async function listUnifiedProducts({ providerStoreId, filters = {}, store: store
   };
 }
 
+/* ======================================================
+   MAIN ENTRY - GET BY _id
+====================================================== */
+async function getUnifiedProductById({
+  productId,
+  providerStoreId,
+  filters = {},
+  store: storeFromReq,
+}) {
+  const providerNameFromQuery = normalizeProviderName(filters.provider);
+  const storeIdFromArg = toStr(providerStoreId);
+
+  const hasStoreKey = !!storeFromReq;
+  const hasStoreId = !!storeIdFromArg;
+
+  if (!hasStoreKey && !hasStoreId) {
+    return getProductFromDbById({
+      productId,
+      store: null,
+      filters,
+    });
+  }
+
+  const store =
+    storeFromReq ||
+    (await getStoreByProviderStoreId(storeIdFromArg, providerNameFromQuery || null));
+
+  const { providerName } = pickProviderFromStore(
+    store,
+    storeIdFromArg,
+    providerNameFromQuery || null
+  );
+
+  if (!providerName) {
+    const err = new Error("Store provider is missing");
+    err.status = 400;
+    throw err;
+  }
+
+  const effectiveFilters = { ...filters, provider: providerName };
+
+  return getProductFromDbById({
+    productId,
+    store,
+    filters: effectiveFilters,
+  });
+}
+
 module.exports = {
   listUnifiedProducts,
+  getUnifiedProductById,
+  getProductFromDbById,
   getStoreByProviderStoreId,
   listProductsFromDb,
 };
