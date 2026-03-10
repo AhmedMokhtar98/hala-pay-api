@@ -3,17 +3,12 @@ const categoryRepo = require("../../models/category/category.repo");
 /* ---------------- controllers ---------------- */
 exports.listCategories = async (req, res) => {
   const filterObject = req.query;
-
-  // optional: populate store if ?populateStore=true
-  const populateStore =
-    String(req.query.populateStore || "").toLowerCase() === "true" ||
-    String(req.query.populateStore || "") === "1";
-
+  console.log(`filterObject`, filterObject);
   const operationResultObject = await categoryRepo.listCategories(
     filterObject,
     {},
     {},
-    { populateStore }
+    {}
   );
 
   return res.status(operationResultObject.code).json(operationResultObject);

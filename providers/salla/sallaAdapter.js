@@ -8,15 +8,17 @@ const {
 } = require("../common/providerUtils");
 
 function mapSallaProductToUnified(p, { storeObjectId }) {
-  const images = Array.isArray(p?.images) ? p.images.map((x) => x?.url).filter(Boolean) : [];
+  const images = Array.isArray(p?.images)
+    ? p.images.map((x) => x?.url).filter(Boolean)
+    : [];
 
-  // stock rules: Salla sometimes: unlimited_quantity + skus[].stock_quantity
   const unlimited = Boolean(p?.unlimited_quantity);
   let stock = 0;
 
   if (Array.isArray(p?.skus) && p.skus.length) {
-    // sum stock quantities (or take max) — choose max for safety
-    const nums = p.skus.map((s) => Number(s?.stock_quantity || 0)).filter((n) => Number.isFinite(n));
+    const nums = p.skus
+      .map((s) => Number(s?.stock_quantity || 0))
+      .filter((n) => Number.isFinite(n));
     stock = nums.length ? Math.max(...nums) : 0;
   } else if (p?.quantity != null) {
     const q = Number(p.quantity);
@@ -33,12 +35,9 @@ function mapSallaProductToUnified(p, { storeObjectId }) {
   const categories = categoriesArr.map((c) => ({
     providerCategoryId: c?.id != null ? String(c.id) : "",
     name: c?.name || "",
-    categoryRef: null, // you can fill it when you sync categories to DB
+    categoryRef: null,
   }));
 
-  // unified status:
-  // - if is_available true -> active
-  // - else -> draft
   const unifiedStatus = p?.is_available ? "active" : "draft";
 
   return {
@@ -60,7 +59,7 @@ function mapSallaProductToUnified(p, { storeObjectId }) {
     images: [p?.main_image, p?.thumbnail, ...images].filter(Boolean),
 
     price: { amount: Number(p?.price?.amount || 0) || 0, currency },
-    compareAtPrice: { amount: Number(p?.regular_price?.amount || 0) || 0, currency },
+    priceBefore: { amount: Number(p?.regular_price?.amount || 0) || 0, currency },
     salePrice: { amount: Number(p?.sale_price?.amount || 0) || 0, currency },
 
     stock,

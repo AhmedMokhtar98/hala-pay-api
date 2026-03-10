@@ -1,13 +1,14 @@
-// services/products/unifiedProducts.service.js
 const mongoose = require("mongoose");
 
 const Stores = require("../../../models/store/store.model");
 const Products = require("../../../models/product/product.model");
+const Categories = require("../../../models/category/category.model");
 
 const { buildProductsDbQuery } = require("./unifiedProducts.query");
 const { upsertProducts } = require("./syncProductsToDb.service");
 const { getProviderAdapter } = require("../..");
 const { NotFoundException } = require("../../../middlewares/errorHandler/exceptions");
+const { normalizeAssetUrl, normalizeFields } = require("../../../helpers/url.helper");
 
 /* ======================================================
    ENV HELPERS
@@ -43,7 +44,11 @@ function normalizeProviderName(v) {
 
 function isObjectId(x) {
   const s = toStr(x);
-  return mongoose.Types.ObjectId.isValid(s);
+  return /^[a-fA-F0-9]{24}$/.test(s);
+}
+
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -52,6 +57,8 @@ function isObjectId(x) {
  * - ["id1","id2"]
  * - { _id: "..." } / { value: "..." } / { id: "..." }
  * - { categoryRef: "..." } / { categoryRef: { _id: "..." } }
+ * - { category: "..." }
+ * - { name: "..." }
  */
 function parseMulti(v) {
   if (v == null) return [];
@@ -64,6 +71,7 @@ function parseMulti(v) {
     if (v.id) return parseMulti(v.id);
     if (v.categoryRef) return parseMulti(v.categoryRef);
     if (v.category) return parseMulti(v.category);
+    if (v.name) return parseMulti(v.name);
     return [];
   }
 
@@ -130,13 +138,11 @@ function pickProviderFromStore(storeDoc, providerStoreId, providerNameFromQuery)
   const storeObj = storeDoc?.toObject ? storeDoc.toObject() : storeDoc || {};
   let providerSubdoc = null;
 
-  // 1) legacy single provider
   if (storeObj?.provider?.name) {
     const legacyName = normalizeProviderName(storeObj.provider.name);
     if (!pnameQ || pnameQ === legacyName) providerSubdoc = storeObj.provider;
   }
 
-  // 2) multi providers[]
   if (!providerSubdoc && Array.isArray(storeObj.providers) && storeObj.providers.length) {
     if (pnameQ) {
       providerSubdoc =
@@ -158,7 +164,6 @@ function pickProviderFromStore(storeDoc, providerStoreId, providerNameFromQuery)
     providerSubdoc?.name || storeObj?.provider?.name || ""
   );
 
-  // ensure adapters always see store.provider as selected provider
   const storeForAdapter = { ...storeObj };
   if (providerSubdoc) storeForAdapter.provider = providerSubdoc;
 
@@ -166,7 +171,7 @@ function pickProviderFromStore(storeDoc, providerStoreId, providerNameFromQuery)
 }
 
 /* ======================================================
-   PROVIDER FILTER (for "provider only" mode)
+   PROVIDER FILTER
 ====================================================== */
 function applyProviderFilterToQuery(query, filters) {
   const providerName = normalizeProviderName(filters?.provider);
@@ -181,18 +186,95 @@ function applyProviderFilterToQuery(query, filters) {
   }
   return { $and: [query, cond] };
 }
-
 /* ======================================================
-   CATEGORY FILTERING (id OR categoryRef OR providerCategoryId)
+   CATEGORY FILTERING (SMART LOOSE MATCH)
+   - one word   => partial contains match
+   - multi word => all words must exist in the SAME category item
+   - english words are token-aware, so "mens" won't match "womens"
 ====================================================== */
-function buildCategoryCondition(filters = {}) {
+
+function splitSearchTerms(value) {
+  const s = toStr(value)
+    .replace(/[_\-./\\]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!s) return [];
+  return s.split(" ").map((x) => x.trim()).filter(Boolean);
+}
+
+function isLatinTerm(value) {
+  return /^[a-z0-9]+$/i.test(toStr(value));
+}
+
+function regexSmart(value) {
+  const term = toStr(value);
+  if (!term) return /.^/;
+
+  if (isLatinTerm(term)) {
+    return new RegExp(`(^|[^a-z0-9])${escapeRegex(term)}([^a-z0-9]|$)`, "i");
+  }
+
+  return new RegExp(escapeRegex(term), "i");
+}
+
+function buildCategoryElemMatch(terms = []) {
+  if (!terms.length) return null;
+
+  return {
+    $and: terms.map((term) => {
+      const rx = regexSmart(term);
+      return {
+        $or: [
+          { name: rx },
+          { nameEn: rx },
+          { nameAr: rx },
+        ],
+      };
+    }),
+  };
+}
+
+function buildRawCategoryElemMatch(terms = []) {
+  if (!terms.length) return null;
+
+  return {
+    $and: terms.map((term) => ({
+      name: regexSmart(term),
+    })),
+  };
+}
+
+function buildCategoryLookupQuery(terms = [], storeId = null, providerName = "") {
+  if (!terms.length) return null;
+
+  const query = {
+    isActive: true,
+    $and: terms.map((term) => {
+      const rx = regexSmart(term);
+      return {
+        $or: [
+          { nameEn: rx },
+          { nameAr: rx },
+        ],
+      };
+    }),
+  };
+
+  if (storeId) query.store = storeId;
+  if (providerName) query.provider = providerName;
+
+  return query;
+}
+
+async function buildCategoryCondition(filters = {}, storeId = null, providerName = "") {
   const rawVal =
     filters.category ??
+    filters.categoryName ??
     filters.categoryId ??
     filters.categoryRef ??
     filters.categoryRefId ??
-    filters.providerCategoryId ??
-    filters.categories; // ✅ supports categories=1840076683,1066038932
+    filters.categories;
 
   const vals = parseMulti(rawVal)
     .map(toStr)
@@ -207,34 +289,59 @@ function buildCategoryCondition(filters = {}) {
     .filter(isObjectId)
     .map((x) => new mongoose.Types.ObjectId(toStr(x)));
 
-  const providerIds = vals.filter((x) => !isObjectId(x)).map(toStr);
+  const names = vals.filter((x) => !isObjectId(x));
 
   const or = [];
 
   if (internalIds.length) {
     or.push({ "categories.categoryRef": { $in: internalIds } });
-    // optional backward compat
     or.push({ category: { $in: internalIds } });
   }
 
-  if (providerIds.length) {
-    or.push({ "categories.providerCategoryId": { $in: providerIds } });
+  for (const value of names) {
+    const terms = splitSearchTerms(value);
+    if (!terms.length) continue;
 
-    // raw.categories.id could be string or number
-    const mixed = providerIds.map((x) => {
-      const n = Number(x);
-      return Number.isFinite(n) ? n : x;
-    });
+    const categoryElemMatch = buildCategoryElemMatch(terms);
+    const rawCategoryElemMatch = buildRawCategoryElemMatch(terms);
+    const categoryLookupQuery = buildCategoryLookupQuery(terms, storeId, providerName);
 
-    or.push({ "raw.categories.id": { $in: mixed } });
+    if (categoryElemMatch) {
+      or.push({
+        categories: {
+          $elemMatch: categoryElemMatch,
+        },
+      });
+    }
+
+    if (rawCategoryElemMatch) {
+      or.push({
+        "raw.categories": {
+          $elemMatch: rawCategoryElemMatch,
+        },
+      });
+    }
+
+    if (categoryLookupQuery) {
+      const matchedCategories = await Categories.find(categoryLookupQuery)
+        .select("_id")
+        .lean();
+
+      const matchedCategoryIds = matchedCategories.map((c) => c._id);
+
+      if (matchedCategoryIds.length) {
+        or.push({ "categories.categoryRef": { $in: matchedCategoryIds } });
+        or.push({ category: { $in: matchedCategoryIds } });
+      }
+    }
   }
 
   if (!or.length) return null;
   return or.length === 1 ? or[0] : { $or: or };
 }
 
-function applyCategoryFilterToQuery(query, filters) {
-  const cond = buildCategoryCondition(filters);
+async function applyCategoryFilterToQuery(query, filters, storeId = null, providerName = "") {
+  const cond = await buildCategoryCondition(filters, storeId, providerName);
   if (!cond) return query;
 
   if (!query || typeof query !== "object") return cond;
@@ -242,9 +349,9 @@ function applyCategoryFilterToQuery(query, filters) {
   if (Array.isArray(query.$and)) {
     return { ...query, $and: [...query.$and, cond] };
   }
+
   return { $and: [query, cond] };
 }
-
 /**
  * If provider adapter returns raw.categories only (no normalized categories[]),
  * build normalized categories for DB upsert.
@@ -254,33 +361,40 @@ function normalizeProviderCategoriesFromRaw(x) {
   if (!Array.isArray(rawCats) || rawCats.length === 0) return [];
 
   return rawCats
-    .map((c) => ({
-      providerCategoryId: toStr(c?.id),
-      name: toStr(c?.name),
-      categoryRef: null,
-    }))
-    .filter((c) => c.providerCategoryId || c.name);
+    .map((c) => {
+      const name = toStr(c?.name);
+      return {
+        providerCategoryId: toStr(c?.id),
+        name,
+        nameEn: name,
+        nameAr: name,
+        categoryRef: null,
+      };
+    })
+    .filter((c) => c.providerCategoryId || c.name || c.nameEn || c.nameAr);
 }
 
 /* ======================================================
-   DB LIST (SAFE POPULATE + OPTIONAL GLOBAL MODE)
+   DB LIST
 ====================================================== */
 async function listProductsFromDb({ store, filters }) {
   const storeId = store?._id || null;
 
-  // buildProductsDbQuery SHOULD allow storeId=null and not force store filtering
   const { query, page, limit, skip, sort, projection } = buildProductsDbQuery(
     filters,
     storeId
   );
 
-  // ✅ provider-only mode
   const q1 = applyProviderFilterToQuery(query, filters);
-
-  // ✅ category filter
-  const finalQuery = applyCategoryFilterToQuery(q1, filters);
-
-  // ✅ include-mode projection must include these for populate + fallbacks
+  const providerName = normalizeProviderName(filters?.provider);
+  const finalQuery = await applyCategoryFilterToQuery(
+    q1,
+    filters,
+    storeId,
+    providerName
+  );
+console.log("products filters =", filters);
+console.log("products finalQuery =", JSON.stringify(finalQuery, null, 2));
   const mustHave = { store: 1, categories: 1, raw: 1 };
   const finalProjection = (() => {
     if (!projection || Object.keys(projection).length === 0) return projection;
@@ -302,44 +416,80 @@ async function listProductsFromDb({ store, filters }) {
       .sort(sort)
       .skip(skip)
       .limit(limit)
-
-      // ✅ store populate always
       .populate({
         path: "store",
-        select: "businessName domain provider providers isActive",
+        select: "businessName domain provider providers isActive logo",
         match: { isActive: true },
       })
-
-      // ✅ categoryRef populate (optional) - match by store when we know store
       .populate({
         path: "categories.categoryRef",
         match: categoryPopulateMatch,
         select: "nameEn nameAr image isActive",
       })
       .lean(),
-
     Products.countDocuments(finalQuery),
   ]);
 
   const cleaned = (items || [])
-    .filter((p) => p.store) // optional: remove products whose store is not active anymore
+    .filter((p) => p.store)
     .map((p) => {
       const cats = Array.isArray(p.categories) ? p.categories : [];
-      const first = cats[0] || null;
+      const rawCats = Array.isArray(p?.raw?.categories) ? p.raw.categories : [];
 
-      const catRef = first?.categoryRef || null;
-      const rawCat = Array.isArray(p?.raw?.categories) ? p.raw.categories[0] : null;
+      const normalizedStore = p.store
+        ? normalizeFields(p.store, ["logo"])
+        : p.store;
 
-      // ✅ UI-friendly "category"
+      const normalizedCategories = cats.map((cat) => {
+        const catRef = cat?.categoryRef
+          ? normalizeFields(cat.categoryRef, ["image"])
+          : null;
+
+        const fallbackName =
+          toStr(catRef?.nameEn) ||
+          toStr(catRef?.nameAr) ||
+          toStr(cat?.nameEn) ||
+          toStr(cat?.nameAr) ||
+          toStr(cat?.name) ||
+          "—";
+
+        return {
+          ...cat,
+          categoryRef: catRef,
+          name: toStr(cat?.name) || fallbackName,
+          nameEn: toStr(cat?.nameEn) || toStr(catRef?.nameEn) || fallbackName,
+          nameAr:
+            toStr(cat?.nameAr) ||
+            toStr(catRef?.nameAr) ||
+            toStr(cat?.nameEn) ||
+            toStr(catRef?.nameEn) ||
+            fallbackName,
+        };
+      });
+
+      const firstNormalized = normalizedCategories[0] || null;
+      const catRef = firstNormalized?.categoryRef || null;
+      const rawCat = rawCats[0] || null;
+
       const category =
         catRef ||
-        (first?.name || first?.providerCategoryId
+        (firstNormalized?.nameEn ||
+        firstNormalized?.nameAr ||
+        firstNormalized?.name ||
+        firstNormalized?.providerCategoryId
           ? {
               _id: null,
-              nameEn: first?.name || "—",
-              nameAr: first?.name || "—",
+              nameEn:
+                firstNormalized?.nameEn ||
+                firstNormalized?.name ||
+                "—",
+              nameAr:
+                firstNormalized?.nameAr ||
+                firstNormalized?.nameEn ||
+                firstNormalized?.name ||
+                "—",
               image: "",
-              providerCategoryId: first?.providerCategoryId || "",
+              providerCategoryId: firstNormalized?.providerCategoryId || "",
             }
           : rawCat?.name || rawCat?.id
           ? {
@@ -351,21 +501,36 @@ async function listProductsFromDb({ store, filters }) {
             }
           : null);
 
+      const normalizedCategory = category
+        ? normalizeFields(category, ["image"])
+        : category;
+
+      const normalizedImages = Array.isArray(p.images)
+        ? p.images.map((img) => normalizeAssetUrl(img))
+        : p.images;
+
       const categoryName =
-        catRef?.nameEn ||
-        first?.name ||
+        normalizedCategory?.nameEn ||
+        normalizedCategory?.nameAr ||
+        firstNormalized?.nameEn ||
+        firstNormalized?.nameAr ||
+        firstNormalized?.name ||
         toStr(rawCat?.name) ||
         "—";
 
       const categoryId =
         (catRef?._id && String(catRef._id)) ||
-        (first?.categoryRef && String(first.categoryRef)) ||
+        (firstNormalized?.categoryRef && String(firstNormalized.categoryRef)) ||
         "";
 
       return {
         ...p,
-        categories: cats,
-        category,
+        store: normalizedStore,
+        images: normalizedImages,
+        mainImage: normalizeAssetUrl(p.mainImage),
+        thumbnail: normalizeAssetUrl(p.thumbnail),
+        categories: normalizedCategories,
+        category: normalizedCategory,
         categoryName,
         categoryId,
       };
@@ -441,13 +606,10 @@ async function listUnifiedProducts({ providerStoreId, filters = {}, store: store
   const providerNameFromQuery = normalizeProviderName(filters.provider);
   const storeIdFromArg = toStr(providerStoreId);
 
-  // ✅ GLOBAL MODE:
-  // if no store middleware + no storeId query => return ALL (or provider-only filter if provided)
   const hasStoreKey = !!storeFromReq;
   const hasStoreId = !!storeIdFromArg;
 
   if (!hasStoreKey && !hasStoreId) {
-    // no sync in global mode
     const sync = String(filters.sync || "0") === "1";
     if (sync) {
       const err = new Error("Sync requires storeId (or req.store from middleware)");
@@ -455,12 +617,10 @@ async function listUnifiedProducts({ providerStoreId, filters = {}, store: store
       throw err;
     }
 
-    // provider-only filter works via applyProviderFilterToQuery()
     const dbResp = await listProductsFromDb({ store: null, filters });
     return { ...dbResp, sync: null };
   }
 
-  // ✅ Store mode (resolve store if middleware didn't provide it)
   const store =
     storeFromReq ||
     (await getStoreByProviderStoreId(storeIdFromArg, providerNameFromQuery || null));
@@ -481,9 +641,6 @@ async function listUnifiedProducts({ providerStoreId, filters = {}, store: store
   const syncPageAll = String(filters.syncPageAll || "0") === "1";
   let syncMeta = null;
 
-  /* ======================
-     SYNC IF REQUESTED
-  ====================== */
   if (sync) {
     const adapter = getProviderAdapter(providerName);
 
@@ -535,10 +692,6 @@ async function listUnifiedProducts({ providerStoreId, filters = {}, store: store
     };
   }
 
-  /* ======================
-     RETURN DB DATA
-  ====================== */
-  // ✅ enforce provider inside filters for store-mode (so provider-only filters don't conflict)
   const effectiveFilters = { ...filters, provider: providerName };
 
   const dbResp = await listProductsFromDb({ store, filters: effectiveFilters });

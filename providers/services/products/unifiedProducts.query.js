@@ -34,7 +34,7 @@ function parseSort(sortRaw) {
     "name",
     "status",
     "price.amount",
-    "compareAtPrice.amount",
+    "priceBefore.amount",
     "salePrice.amount",
     "stock",
   ]);
@@ -42,10 +42,6 @@ function parseSort(sortRaw) {
   if (!allowed.has(field)) return { createdAt: -1 };
   return { [field]: dir };
 }
-
-/* =========================
-   Multi helpers
-========================= */
 
 function toStr(v) {
   return String(v ?? "").trim();
@@ -57,91 +53,9 @@ function normProvider(v) {
   return s;
 }
 
-function isObjectId(x) {
-  const s = toStr(x);
-  return mongoose.Types.ObjectId.isValid(s);
-}
-
-function parseMulti(v) {
-  if (v == null) return [];
-
-  if (Array.isArray(v)) return v.flatMap(parseMulti);
-
-  if (typeof v === "object") {
-    if (v._id) return parseMulti(v._id);
-    if (v.value) return parseMulti(v.value);
-    if (v.id) return parseMulti(v.id);
-    return [];
-  }
-
-  const s = toStr(v);
-  if (!s) return [];
-
-  return s
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-
-/**
- * Category condition supports:
- * - internal category ObjectId(s) => categories.categoryRef
- * - provider category id(s) => categories.providerCategoryId
- * - fallback => raw.categories.id (number|string)
- */
-function buildCategoryCondition(filters = {}) {
-  const rawVal =
-    filters.categories ??
-    filters.category ??
-    filters.categoryId ??
-    filters.category_id ??
-    filters.categoryRef ??
-    filters.categoryRefId ??
-    filters.providerCategoryId;
-
-  const vals = parseMulti(rawVal)
-    .map(toStr)
-    .filter((x) => {
-      const s = x.toLowerCase();
-      return s && s !== "all" && s !== "null" && s !== "undefined";
-    });
-
-  if (!vals.length) return null;
-
-  const internalIds = vals
-    .filter(isObjectId)
-    .map((x) => new mongoose.Types.ObjectId(toStr(x)));
-
-  const providerIds = vals.filter((x) => !isObjectId(x)).map(toStr);
-
-  const or = [];
-
-  if (internalIds.length) {
-    or.push({ "categories.categoryRef": { $in: internalIds } });
-  }
-
-  if (providerIds.length) {
-    or.push({ "categories.providerCategoryId": { $in: providerIds } });
-
-    const mixed = providerIds.map((x) => {
-      const n = Number(x);
-      return Number.isFinite(n) ? n : x;
-    });
-
-    or.push({ "raw.categories.id": { $in: mixed } });
-  }
-
-  if (!or.length) return null;
-  return or.length === 1 ? or[0] : { $or: or };
-}
-
 /**
  * Build Mongo query for unified products DB
- * Supports:
- * - global mode (no storeObjectId => no store filter)
- * - provider-only mode (filters.provider)
- * - store mode (storeObjectId)
- * - categories multi filter (ObjectIds + providerCategoryId)
+ * Category filtering is handled ONLY in unifiedProducts.service.js
  */
 function buildProductsDbQuery(filters = {}, storeObjectId) {
   const page = toPositiveInt(filters.page, 1);
@@ -154,29 +68,26 @@ function buildProductsDbQuery(filters = {}, storeObjectId) {
 
   const keyword = normalizeText(filters.keyword || filters.search || filters.q);
   const status = normalizeUnifiedStatus(filters.status);
-
   const provider = normProvider(filters.provider);
 
   const query = {
     isActive: true,
   };
 
-  // ✅ store filter ONLY if storeObjectId is provided & valid
   if (storeObjectId && mongoose.Types.ObjectId.isValid(String(storeObjectId))) {
     query.store = new mongoose.Types.ObjectId(String(storeObjectId));
   }
 
-  // ✅ provider-only mode
   if (provider) {
     query.provider = provider;
   }
 
-  // ✅ status
-  if (status) query.status = status;
+  if (status) {
+    query.status = status;
+  }
 
   const and = [];
 
-  // ✅ keyword search (index-friendly-ish)
   if (keyword) {
     const rx = escapeRegex(keyword);
     and.push({
@@ -188,19 +99,16 @@ function buildProductsDbQuery(filters = {}, storeObjectId) {
     });
   }
 
-  // ✅ categories filter (supports categories=184,106 ...)
-  const catCond = buildCategoryCondition(filters);
-  if (catCond) and.push(catCond);
-
-  if (and.length) query.$and = and;
+  if (and.length) {
+    query.$and = and;
+  }
 
   const sort = parseSort(filters.sort || filters.orderBy);
 
-  // projection optional
   const projection =
     String(filters.light || "0") === "1"
       ? {
-          raw: 0, // hide raw huge provider data
+          raw: 0,
         }
       : {};
 

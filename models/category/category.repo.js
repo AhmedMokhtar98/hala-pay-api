@@ -12,6 +12,7 @@ const {
 
 const categoryModel = require("./category.model");
 const storeModel = require("../store/store.model");
+const { normalizeAssetUrl } = require("../../helpers/url.helper");
 
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 
@@ -312,8 +313,12 @@ exports.listCategories = async (
     defaultSort: "createdAt",
   });
 
-  // ✅ NEW: handle provider + storeId filtering (storeId can be ObjectId OR provider storeId)
-  const storeRes = await applyProviderAndStoreFilter(normalizedFilter, pageNumber, limitNumber);
+  // handle provider + storeId filtering
+  const storeRes = await applyProviderAndStoreFilter(
+    normalizedFilter,
+    pageNumber,
+    limitNumber
+  );
   if (storeRes?.empty) return storeRes.response;
 
   const finalFilter = applySearchFilter(normalizedFilter, [
@@ -329,10 +334,8 @@ exports.listCategories = async (
     const values = Object.values(sel).map((v) => Number(v));
     const isIncludeMode = values.some((v) => v === 1);
 
-    // include-mode => ensure store exists for populate
     if (isIncludeMode) return { ...sel, store: 1 };
 
-    // exclude-mode => if store explicitly excluded, remove exclusion so populate works
     if (Number(sel.store) === 0) {
       const copy = { ...sel };
       delete copy.store;
@@ -344,29 +347,111 @@ exports.listCategories = async (
 
   const safeSelection = ensureStoreSelected(selectionObject);
 
-  const query = categoryModel
+  /* ======================================================
+     DEDUPE HELPERS
+  ====================================================== */
+  const normalizeArabicText = (value) =>
+    String(value || "")
+      .replace(/[\u064B-\u065F\u0670]/g, "") // remove tashkeel
+      .replace(/ـ/g, "") // tatweel
+      .replace(/[أإآ]/g, "ا")
+      .replace(/ى/g, "ي")
+      .replace(/ؤ/g, "و")
+      .replace(/ئ/g, "ي");
+
+  const normalizeNameForDedup = (value) => {
+    const s = normalizeArabicText(
+      String(value || "")
+        .normalize("NFKC")
+        .toLowerCase()
+        .replace(/[_\-./\\]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+    );
+
+    return s;
+  };
+
+  const getCategoryDedupKey = (category) => {
+    const nameAr = normalizeNameForDedup(category?.nameAr);
+    const nameEn = normalizeNameForDedup(category?.nameEn);
+
+    // prefer Arabic name if exists, otherwise English
+    return nameAr || nameEn || "";
+  };
+
+  const categoryScore = (category) => {
+    let score = 0;
+
+    if (category?.image) score += 3;
+    if (category?.descriptionEn) score += 1;
+    if (category?.descriptionAr) score += 1;
+    if (category?.nameEn) score += 1;
+    if (category?.nameAr) score += 1;
+    if (category?.store?._id) score += 1;
+    if (category?.store?.logo) score += 1;
+
+    return score;
+  };
+
+  /* ======================================================
+     FETCH ALL MATCHED -> NORMALIZE -> DEDUPE -> PAGINATE
+  ====================================================== */
+
+  const categories = await categoryModel
     .find(finalFilter)
     .populate({
       path: "store",
-      // ✅ IMPORTANT: storeId غالبًا nested (provider.storeId/providers.storeId)
-      // رجّع provider/providers عشان الـ UI يعرف يطلع storeId + provider name
       select: "businessName domain logo storeId provider providers isActive",
       match: { isActive: true },
     })
     .select(safeSelection)
     .sort(normalizedSort)
-    .limit(limitNumber)
-    .skip((pageNumber - 1) * limitNumber);
+    .lean();
 
-  const [categories, count] = await Promise.all([
-    query.lean(),
-    categoryModel.countDocuments(finalFilter),
-  ]);
+  const normalizedCategories = categories.map((category) => ({
+    ...category,
+    image: normalizeAssetUrl(category.image),
+    store: category.store
+      ? {
+          ...category.store,
+          logo: normalizeAssetUrl(category.store.logo),
+        }
+      : category.store,
+  }));
+
+  const dedupMap = new Map();
+
+  for (const category of normalizedCategories) {
+    const key = getCategoryDedupKey(category);
+
+    // لو مفيش اسم أصلاً، خليه unique بالـ _id
+    const finalKey = key || `__no_name__:${String(category._id)}`;
+
+    const existing = dedupMap.get(finalKey);
+
+    if (!existing) {
+      dedupMap.set(finalKey, category);
+      continue;
+    }
+
+    // keep the richer / better version
+    if (categoryScore(category) > categoryScore(existing)) {
+      dedupMap.set(finalKey, category);
+    }
+  }
+
+  const uniqueCategories = Array.from(dedupMap.values());
+  const count = uniqueCategories.length;
+
+  const start = (pageNumber - 1) * limitNumber;
+  const end = start + limitNumber;
+  const paginatedCategories = uniqueCategories.slice(start, end);
 
   return {
     success: true,
     code: 200,
-    result: categories,
+    result: paginatedCategories,
     count,
     page: pageNumber,
     limit: limitNumber,
@@ -383,9 +468,22 @@ exports.getCategory = async (categoryId) => {
   });
 
   const doc = await query.lean();
-  if (!doc) return { success: false, code: 404, message: "Category not found" };
+  if (!doc) {
+    return { success: false, code: 404, message: "Category not found" };
+  }
 
-  return { success: true, code: 200, result: doc };
+  const normalizedDoc = {
+    ...doc,
+    image: normalizeAssetUrl(doc.image),
+    store: doc.store
+      ? {
+          ...doc.store,
+          logo: normalizeAssetUrl(doc.store.logo),
+        }
+      : doc.store,
+  };
+
+  return { success: true, code: 200, result: normalizedDoc };
 };
 
 exports.updateCategory = async (categoryId, body = {}) => {

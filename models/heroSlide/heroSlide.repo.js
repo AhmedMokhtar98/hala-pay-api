@@ -12,6 +12,7 @@ const {
 } = require("../../middlewares/errorHandler/exceptions");
 
 const heroSlideModel = require("./heroSlide.model");
+const { normalizeAssetUrl } = require("../../helpers/url.helper");
 
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 const HERO_DIR = path.join(PUBLIC_DIR, "images", "hero-slides");
@@ -79,8 +80,11 @@ exports.createHeroSlide = async (payload = {}) => {
 
   return { success: true, code: 201, result: doc };
 };
-
-exports.listHeroSlides = async (filterObject = {}, selectionObject = {}, sortObject = {}) => {
+exports.listHeroSlides = async (
+  filterObject = {},
+  selectionObject = {},
+  sortObject = {}
+) => {
   const {
     filterObject: normalizedFilter,
     sortObject: normalizedSort,
@@ -101,7 +105,7 @@ exports.listHeroSlides = async (filterObject = {}, selectionObject = {}, sortObj
   const query = heroSlideModel
     .find(finalFilter)
     .select(selectionObject)
-    .populate("store", "businessName storeId logo")
+    .populate("store", "businessName storeId logo provider")
     .populate("category", "nameEn nameAr descriptionEn descriptionAr image isActive")
     .sort(normalizedSort)
     .limit(limitNumber)
@@ -112,13 +116,55 @@ exports.listHeroSlides = async (filterObject = {}, selectionObject = {}, sortObj
     heroSlideModel.countDocuments(finalFilter),
   ]);
 
-  return { success: true, code: 200, result: slides, count, page: pageNumber, limit: limitNumber };
+  const normalizedSlides = slides.map((slide) => ({
+    ...slide,
+    image: normalizeAssetUrl(slide.image),
+    store: slide.store
+      ? {
+          ...slide.store,
+          logo: normalizeAssetUrl(slide.store.logo),
+        }
+      : slide.store,
+    category: slide.category
+      ? {
+          ...slide.category,
+          image: normalizeAssetUrl(slide.category.image),
+        }
+      : slide.category,
+  }));
+
+  return {
+    success: true,
+    code: 200,
+    result: normalizedSlides,
+    count,
+    page: pageNumber,
+    limit: limitNumber,
+  };
 };
 
 exports.getHeroSlide = async (slideId) => {
   const doc = await heroSlideModel.findById(slideId).lean();
   if (!doc) throw new NotFoundException("errors.heroSlideNotFound");
-  return { success: true, code: 200, result: doc };
+
+  const normalizedDoc = {
+    ...doc,
+    image: normalizeAssetUrl(doc.image),
+    store: doc.store
+      ? {
+          ...doc.store,
+          logo: normalizeAssetUrl(doc.store.logo),
+        }
+      : doc.store,
+    category: doc.category
+      ? {
+          ...doc.category,
+          image: normalizeAssetUrl(doc.category.image),
+        }
+      : doc.category,
+  };
+
+  return { success: true, code: 200, result: normalizedDoc };
 };
 
 exports.updateHeroSlide = async (slideId, body = {}) => {

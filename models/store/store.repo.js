@@ -19,6 +19,7 @@ const storeModel = require("./store.model");
 
 const fs = require("fs");
 const path = require("path");
+const { normalizeAssetUrl } = require("../../helpers/url.helper");
 
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 
@@ -167,7 +168,6 @@ exports.listStores = async (
     defaultSort: "-createdAt",
   });
 
-  // Optional explicit filters
   const providerFilter = normalizedFilter?.providerName || normalizedFilter?.provider;
   const activeFilter =
     typeof normalizedFilter?.isActive !== "undefined"
@@ -175,11 +175,14 @@ exports.listStores = async (
       : undefined;
 
   const baseFilter = {
-    ...(providerFilter && { "provider.name": String(providerFilter).toLowerCase().trim() }),
-    ...(typeof activeFilter !== "undefined" && { isActive: activeFilter === "true" || activeFilter === true }),
+    ...(providerFilter && {
+      "provider.name": String(providerFilter).toLowerCase().trim(),
+    }),
+    ...(typeof activeFilter !== "undefined" && {
+      isActive: activeFilter === "true" || activeFilter === true,
+    }),
   };
 
-  // Allow search across multiple fields
   const finalFilter = applySearchFilter(
     { ...normalizedFilter, ...baseFilter },
     ["businessName", "provider.name", "provider.storeId"]
@@ -196,10 +199,15 @@ exports.listStores = async (
     storeModel.countDocuments(finalFilter),
   ]);
 
+  const normalizedStores = stores.map((store) => ({
+    ...store,
+    logo: normalizeAssetUrl(store.logo),
+  }));
+
   return {
     success: true,
     code: 200,
-    result: stores,
+    result: normalizedStores,
     count,
     page: pageNumber,
     limit: limitNumber,
@@ -224,10 +232,15 @@ exports.getStore = async (storeId) => {
     return { success: false, code: 404, message: "Store is inactive" };
   }
 
+  const normalizedStore = {
+    ...store,
+    logo: normalizeAssetUrl(store.logo),
+  };
+
   return {
     success: true,
     code: 200,
-    result: store,
+    result: normalizedStore,
   };
 };
 

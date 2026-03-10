@@ -1,4 +1,3 @@
-// models/product/product.model.js
 const mongoose = require("mongoose");
 
 const priceSchema = new mongoose.Schema(
@@ -7,6 +6,22 @@ const priceSchema = new mongoose.Schema(
     currency: { type: String, default: "SAR", trim: true },
   },
   { _id: false }
+);
+
+const productCategorySchema = new mongoose.Schema(
+  {
+    providerCategoryId: { type: String, default: "", trim: true, index: true },
+    name: { type: String, default: "", trim: true },
+    nameEn: { type: String, default: "", trim: true },
+    nameAr: { type: String, default: "", trim: true },
+    categoryRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "categories",
+      default: null,
+      index: true,
+    },
+  },
+  { _id: true }
 );
 
 const variantSchema = new mongoose.Schema(
@@ -23,109 +38,81 @@ const variantSchema = new mongoose.Schema(
     unlimited: { type: Boolean, default: false },
 
     isAvailable: { type: Boolean, default: true },
-    options: { type: mongoose.Schema.Types.Mixed, default: null }, // size/color mapping
+    options: { type: mongoose.Schema.Types.Mixed, default: null },
   },
-  { _id: false }
+  { _id: true }
 );
 
 const productSchema = new mongoose.Schema(
   {
-    // link to your connected store (internal)
-    store: { type: mongoose.Schema.Types.ObjectId, ref: "stores", required: true, index: true },
-
-    // provider identity
-    provider: { type: String, required: true, lowercase: true, trim: true, index: true },
-    providerProductId: { type: String, required: true, trim: true, index: true },
-
-    // basic info
-    name: { type: String, default: "", trim: true, index: true },
-    description: { type: String, default: "", trim: true },
-
-    // urls
-    urls: {
-      customer: { type: String, default: "", trim: true },
-      admin: { type: String, default: "", trim: true },
-      product_card: { type: String, default: "", trim: true },
+    store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "stores",
+      required: true,
+      index: true,
     },
 
-    // images
-    thumbnail: { type: String, default: "", trim: true },
-    mainImage: { type: String, default: "", trim: true },
-    images: {
-      type: [String],
-      default: [],
-      validate: {
-        validator: (arr) => Array.isArray(arr) && arr.every((s) => typeof s === "string"),
-        message: "images must be an array of strings",
-      },
-    },
+    provider: { type: String, required: true, trim: true, index: true },
+    providerProductId: { type: String, default: "", trim: true, index: true },
 
-    // pricing
+    name: { type: String, default: "", trim: true },
+    description: { type: String, default: "" },
+
+    images: { type: [String], default: [] },
+    mainImage: { type: String, default: "" },
+    thumbnail: { type: String, default: "" },
+
+    priceBefore: { type: priceSchema, default: () => ({}) },
     price: { type: priceSchema, default: () => ({}) },
-    compareAtPrice: { type: priceSchema, default: () => ({}) }, // priceBefore
     salePrice: { type: priceSchema, default: () => ({}) },
 
-    // inventory / availability
     stock: { type: Number, default: 0, min: 0 },
     unlimited: { type: Boolean, default: false },
-    isAvailable: { type: Boolean, default: true, index: true },
+    isAvailable: { type: Boolean, default: true },
+    isActive: { type: Boolean, default: true },
 
-    // status mapping (unified)
-    // active | draft | archived
-    status: { type: String, default: "active", index: true },
+    status: { type: String, default: "active", trim: true },
+    sku: { type: String, default: "", trim: true },
 
-    // categories (provider category IDs + optional refs)
-    categories: [
-      {
-        providerCategoryId: { type: String, default: "", trim: true, index: true },
-        name: { type: String, default: "", trim: true },
-        categoryRef: { type: mongoose.Schema.Types.ObjectId, ref: "categories", default: null },
-      },
-    ],
+    categories: {
+      type: [productCategorySchema],
+      default: [],
+    },
 
-    // variants (optional)
-    variants: { type: [variantSchema], default: [] },
-
-    // meta
-    sku: { type: String, default: "", trim: true, index: true },
-    weight: { type: Number, default: 0, min: 0 },
-    weightUnit: { type: String, default: "kg", trim: true },
+    variants: {
+      type: [variantSchema],
+      default: [],
+    },
 
     rating: {
       count: { type: Number, default: 0, min: 0 },
       rate: { type: Number, default: 0, min: 0 },
     },
 
-    // snapshot of provider object
-    raw: { type: mongoose.Schema.Types.Mixed, default: null },
+    discount: { type: Number, default: 0, min: 0 },
 
-    // flags
-    isActive: { type: Boolean, default: true, index: true },
+    urls: {
+      admin: { type: String, default: "" },
+      customer: { type: String, default: "" },
+      product_card: { type: String, default: "" },
+    },
+
+    weight: { type: Number, default: 0, min: 0 },
+    weightUnit: { type: String, default: "kg", trim: true },
+
+    raw: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true }
 );
 
-// prevent duplicates per store+provider+id
-productSchema.index({ store: 1, provider: 1, providerProductId: 1 }, { unique: true });
+productSchema.index(
+  { store: 1, provider: 1, providerProductId: 1 },
+  { unique: true }
+);
 
-// helper virtuals
-productSchema.virtual("discountPercent").get(function () {
-  const before = Number(this.compareAtPrice?.amount || 0);
-  const now = Number(this.price?.amount || 0);
-  if (before > 0 && now > 0 && before > now) {
-    return Math.round(((before - now) / before) * 100);
-  }
-  return 0;
-});
-
-productSchema.virtual("finalPrice").get(function () {
-  const sale = Number(this.salePrice?.amount || 0);
-  if (sale > 0) return sale;
-  const now = Number(this.price?.amount || 0);
-  return now;
-});
-
-productSchema.set("toJSON", { virtuals: true });
-productSchema.set("toObject", { virtuals: true });
+productSchema.index({ "categories.categoryRef": 1 });
+productSchema.index({ "categories.name": 1 });
+productSchema.index({ "categories.nameEn": 1 });
+productSchema.index({ "categories.nameAr": 1 });
 
 module.exports = mongoose.model("products", productSchema);
