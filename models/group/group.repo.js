@@ -315,23 +315,35 @@ exports.deleteGroup = async (_id, permanent = false) => {
 
     try {
       const groupDir = path.join(PUBLIC_DIR, "images", "groups", String(_id));
-      if (fs.existsSync(groupDir)) fs.rmSync(groupDir, { recursive: true, force: true });
+      if (fs.existsSync(groupDir)) {
+        fs.rmSync(groupDir, { recursive: true, force: true });
+      }
     } catch (_) {}
 
-    return { success: true, code: 200, message: "success.record_deleted" };
+    return {
+      success: true,
+      code: 200,
+      message: "success.record_deleted",
+    };
   }
 
   const updated = await groupModel
-    .findOneAndUpdate({ _id, isActive: true }, { isActive: false }, { new: true })
+    .findByIdAndUpdate(
+      _id,
+      { isActive: false },
+      { new: true }
+    )
     .lean();
 
   if (!updated) {
-    const exists = await groupModel.findById(_id).select({ _id: 1 }).lean();
-    if (!exists) throw new NotFoundException("errors.group_not_found");
-    return { success: true, code: 200, message: "success.record_disabled" };
+    throw new NotFoundException("errors.group_not_found");
   }
 
-  return { success: true, code: 200, message: "success.record_disabled" };
+  return {
+    success: true,
+    code: 200,
+    message: "success.record_disabled",
+  };
 };
 
 /* ---------------------------
@@ -535,6 +547,13 @@ async function purchaseGroupNow(groupId) {
 }
 
 module.exports = {
+  createGroup: exports.createGroup,
+  listGroups: exports.listGroups,
+  getGroup: exports.getGroup,
+  updateGroup: exports.updateGroup,
+  deleteGroup: exports.deleteGroup,
+  uploadGroupImage: exports.uploadGroupImage,
+  removeGroupImage: exports.removeGroupImage,
   checkAndPurchaseGroup,
   purchaseGroupNow,
 };

@@ -10,7 +10,7 @@ exports.createGroup = async (req, res) => {
 
 exports.listGroups = async (req, res) => {
   const filterObject = req.query;
-  const op = await groupRepo.listGroups(filterObject, {}, {}, {});
+  const op = await groupRepo.listGroups(filterObject, {}, {});
   return res.status(op.code).json(op);
 };
 
@@ -30,8 +30,13 @@ exports.updateGroup = async (req, res) => {
 exports.deleteGroup = async (req, res) => {
   const { _id } = req.params;
 
-  // ✅ permanent is TRUE only if it is explicitly true / "true" / 1 / "1"
-  const permanent = req.body?.permanent === true || req.body?.permanent === "true" 
+  const rawPermanent = req.body?.permanent;
+
+  const permanent =
+    rawPermanent === true ||
+    rawPermanent === "true" ||
+    rawPermanent === 1 ||
+    rawPermanent === "1";
 
   const op = await groupRepo.deleteGroup(_id, permanent);
   return res.status(op.code).json(op);
