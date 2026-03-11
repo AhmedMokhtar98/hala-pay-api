@@ -6,6 +6,7 @@ const { normalizeText } = require("../../utils/helpers");
 
 const fs = require("fs");
 const path = require("path");
+const mongoose = require("mongoose");
 
 const storeModel = require("../store/store.model");
 const categoryModel = require("../category/category.model");
@@ -18,6 +19,8 @@ const BASE_URL =
     process.env.API_BASE_URL ||
     ""
   ).replace(/\/$/, "");
+
+const LOCAL_PRODUCT_IMAGE_PREFIX = "/images/products/";
 
 const STORE_POPULATE = {
   path: "store",
@@ -110,24 +113,42 @@ const normalizeImagePath = (input) => {
   } catch (_) {}
 
   u = u.split("?")[0].split("#")[0];
+  u = u.replace(/\\/g, "/");
+
+  if (u.startsWith(LOCAL_PRODUCT_IMAGE_PREFIX)) {
+    return u;
+  }
+
+  if (!u.startsWith("/") && u.includes("images/products/")) {
+    const idx = u.indexOf("images/products/");
+    return `/${u.slice(idx)}`;
+  }
 
   if (/^https?:\/\//i.test(u)) {
     if (BASE_URL && u.startsWith(BASE_URL)) {
-      u = u.slice(BASE_URL.length);
-    } else {
-      try {
-        const parsed = new URL(u);
-        u = parsed.pathname || "";
-      } catch (_) {
-        const idx = u.indexOf("/", u.indexOf("//") + 2);
-        u = idx >= 0 ? u.slice(idx) : u;
+      const pathPart = u.slice(BASE_URL.length).replace(/\\/g, "/");
+      if (pathPart.startsWith(LOCAL_PRODUCT_IMAGE_PREFIX)) {
+        return pathPart;
       }
+      return u;
     }
+
+    return u;
   }
 
-  u = u.replace(/\\/g, "/");
-  if (u && !u.startsWith("/")) u = `/${u}`;
+  if (!u.startsWith("/")) u = `/${u}`;
   return u;
+};
+
+const isLocalProductImagePath = (value, productId = "") => {
+  const normalized = normalizeImagePath(value);
+  if (!normalized) return false;
+
+  const expectedPrefix = productId
+    ? `${LOCAL_PRODUCT_IMAGE_PREFIX}${productId}/`
+    : LOCAL_PRODUCT_IMAGE_PREFIX;
+
+  return normalized.startsWith(expectedPrefix);
 };
 
 const resolveStoreId = async ({ store, storeId }) => {
@@ -163,12 +184,46 @@ const resolveCategories = async (payload, store) => {
     ),
   ];
 
-  if (!categoryRefs.length) {
+  const rawProviderCategoryIds = [
+    ...new Set(
+      inputCategories
+        .map((c) => c?.providerCategoryId || null)
+        .filter(Boolean)
+        .map(String)
+    ),
+  ];
+
+  const providerCategoryObjectIds = rawProviderCategoryIds.filter((id) =>
+    mongoose.Types.ObjectId.isValid(id)
+  );
+
+  const realProviderCategoryIds = rawProviderCategoryIds.filter(
+    (id) => !mongoose.Types.ObjectId.isValid(id)
+  );
+
+  if (
+    !categoryRefs.length &&
+    !providerCategoryObjectIds.length &&
+    !realProviderCategoryIds.length
+  ) {
     return { success: true, categories: [] };
   }
 
+  const orConditions = [
+    ...(categoryRefs.length ? [{ _id: { $in: categoryRefs } }] : []),
+    ...(providerCategoryObjectIds.length
+      ? [{ _id: { $in: providerCategoryObjectIds } }]
+      : []),
+    ...(realProviderCategoryIds.length
+      ? [{ providerCategoryId: { $in: realProviderCategoryIds } }]
+      : []),
+  ];
+
   const categoryDocs = await categoryModel
-    .find({ _id: { $in: categoryRefs } })
+    .find({
+      store,
+      $or: orConditions,
+    })
     .select({
       _id: 1,
       store: 1,
@@ -179,39 +234,68 @@ const resolveCategories = async (payload, store) => {
     })
     .lean();
 
-  if (categoryDocs.length !== categoryRefs.length) {
-    return {
-      success: false,
-      code: 404,
-      message: "One or more categories not found",
-    };
-  }
-
-  const categoryDocsMap = new Map();
+  const byId = new Map();
+  const byProviderCategoryId = new Map();
 
   for (const cat of categoryDocs) {
-    if (String(cat.store) !== String(store)) {
+    byId.set(String(cat._id), cat);
+    if (cat?.providerCategoryId) {
+      byProviderCategoryId.set(String(cat.providerCategoryId), cat);
+    }
+  }
+
+  for (const refId of categoryRefs) {
+    if (!byId.has(String(refId))) {
       return {
         success: false,
-        code: 400,
-        message: "One or more categories do not belong to this store",
+        code: 404,
+        message: "One or more categories not found",
       };
     }
-    categoryDocsMap.set(String(cat._id), cat);
+  }
+
+  for (const refId of providerCategoryObjectIds) {
+    if (!byId.has(String(refId))) {
+      return {
+        success: false,
+        code: 404,
+        message: "One or more categories not found",
+      };
+    }
+  }
+
+  for (const providerCategoryId of realProviderCategoryIds) {
+    if (!byProviderCategoryId.has(String(providerCategoryId))) {
+      return {
+        success: false,
+        code: 404,
+        message: "One or more categories not found",
+      };
+    }
   }
 
   const categories = inputCategories.map((item) => {
     const categoryRef = item?.categoryRef || item?.category || item?._id || null;
-    const catDoc = categoryRef ? categoryDocsMap.get(String(categoryRef)) : null;
+    const providerCategoryId = item?.providerCategoryId || null;
+
+    let catDoc = null;
+
+    if (categoryRef) {
+      catDoc = byId.get(String(categoryRef)) || null;
+    } else if (providerCategoryId) {
+      if (mongoose.Types.ObjectId.isValid(String(providerCategoryId))) {
+        catDoc = byId.get(String(providerCategoryId)) || null;
+      } else {
+        catDoc = byProviderCategoryId.get(String(providerCategoryId)) || null;
+      }
+    }
 
     return {
       providerCategoryId:
-        toStr(item?.providerCategoryId) ||
-        toStr(catDoc?.providerCategoryId) ||
-        "",
-      name: toStr(item?.name) || toStr(catDoc?.name) || "",
-      nameEn: toStr(item?.nameEn) || toStr(catDoc?.nameEn) || "",
-      nameAr: toStr(item?.nameAr) || toStr(catDoc?.nameAr) || "",
+        String(item?.providerCategoryId || catDoc?.providerCategoryId || "").trim(),
+      name: String(item?.name || catDoc?.name || "").trim(),
+      nameEn: String(item?.nameEn || catDoc?.nameEn || "").trim(),
+      nameAr: String(item?.nameAr || catDoc?.nameAr || "").trim(),
       categoryRef: catDoc?._id || null,
     };
   });
@@ -263,7 +347,11 @@ const buildPriceState = (payload = {}, currentDoc = null) => {
     payload?.discount !== undefined || payload?.priceBefore !== undefined;
 
   if (!salePriceWasProvided) {
-    if (priceBeforeAmount > 0 && discount > 0 && (recomputeFromDiscount || salePriceAmount <= 0)) {
+    if (
+      priceBeforeAmount > 0 &&
+      discount > 0 &&
+      (recomputeFromDiscount || salePriceAmount <= 0)
+    ) {
       salePriceAmount = +(priceBeforeAmount * (1 - discount / 100)).toFixed(2);
     } else if (salePriceAmount <= 0) {
       salePriceAmount = priceAmount > 0 ? priceAmount : priceBeforeAmount;
@@ -338,8 +426,11 @@ exports.createProduct = async (productData) => {
     }
 
     const images = normalizeStringArray(productData.images);
-    const mainImage = normalizeImagePath(productData.mainImage) || normalizeImagePath(images[0]) || "";
-    const thumbnail = normalizeImagePath(productData.thumbnail) || mainImage || "";
+    const normalizedImages = images.map(normalizeImagePath).filter(Boolean);
+    const mainImage =
+      normalizeImagePath(productData.mainImage) || normalizedImages[0] || "";
+    const thumbnail =
+      normalizeImagePath(productData.thumbnail) || mainImage || "";
 
     const { priceBefore, price, salePrice, discount } = buildPriceState(productData);
 
@@ -358,7 +449,7 @@ exports.createProduct = async (productData) => {
       name: toStr(productData.name),
       description: toStr(productData.description),
 
-      images: images.map(normalizeImagePath).filter(Boolean),
+      images: normalizedImages,
       mainImage,
       thumbnail,
 
@@ -654,22 +745,32 @@ exports.updateProduct = async (productId, payload) => {
       doc.store = resolvedStore;
     }
 
-    if (
-      payload?.categories !== undefined ||
-      payload?.category !== undefined
-    ) {
+    if (payload?.categories !== undefined || payload?.category !== undefined) {
       const categoriesResult = await resolveCategories(payload, nextStore);
       if (!categoriesResult.success) return categoriesResult;
       doc.categories = categoriesResult.categories;
     }
 
-    if (payload?.provider !== undefined) doc.provider = toStr(payload.provider);
+    if (payload?.provider !== undefined) {
+      doc.provider = toStr(payload.provider);
+    }
+
     if (payload?.providerProductId !== undefined) {
       doc.providerProductId = toStr(payload.providerProductId);
     }
 
-    if (payload?.name !== undefined) doc.name = toStr(payload.name);
-    if (payload?.description !== undefined) doc.description = toStr(payload.description);
+    if (payload?.name !== undefined) {
+      doc.name = toStr(payload.name);
+    }
+
+    if (payload?.description !== undefined) {
+      doc.description = toStr(payload.description);
+    }
+
+    const hasImagePayload =
+      payload?.images !== undefined ||
+      payload?.mainImage !== undefined ||
+      payload?.thumbnail !== undefined;
 
     if (payload?.images !== undefined) {
       doc.images = normalizeStringArray(payload.images)
@@ -714,8 +815,13 @@ exports.updateProduct = async (productId, payload) => {
       doc.isActive = toBool(payload.isActive, true);
     }
 
-    if (payload?.status !== undefined) doc.status = toStr(payload.status);
-    if (payload?.sku !== undefined) doc.sku = toStr(payload.sku);
+    if (payload?.status !== undefined) {
+      doc.status = toStr(payload.status);
+    }
+
+    if (payload?.sku !== undefined) {
+      doc.sku = toStr(payload.sku);
+    }
 
     if (payload?.variants !== undefined) {
       const currency =
@@ -748,7 +854,9 @@ exports.updateProduct = async (productId, payload) => {
       doc.raw = payload.raw ?? null;
     }
 
-    normalizeDocumentImageState(doc);
+    if (hasImagePayload) {
+      normalizeDocumentImageState(doc);
+    }
 
     await doc.save();
     await doc.populate([STORE_POPULATE, PRODUCT_CATEGORIES_POPULATE]);
@@ -872,21 +980,23 @@ exports.uploadProductImages = async (productId, files) => {
 
   const uploadedUrls = files
     .filter((f) => f?.filename)
-    .map((f) => `/images/products/${productId}/${f.filename}`)
+    .map((f) => `${LOCAL_PRODUCT_IMAGE_PREFIX}${productId}/${f.filename}`)
     .map(normalizeImagePath)
     .filter(Boolean);
 
   const current = Array.isArray(doc.images) ? doc.images : [];
-  const seen = new Set(current.map((x) => normalizeImagePath(x)).filter(Boolean));
+  const normalizedCurrent = current.map(normalizeImagePath).filter(Boolean);
+  const seen = new Set(normalizedCurrent);
+  const nextImages = [...normalizedCurrent];
 
   for (const u of uploadedUrls) {
     if (!seen.has(u)) {
-      current.push(u);
+      nextImages.push(u);
       seen.add(u);
     }
   }
 
-  doc.images = current.map(normalizeImagePath).filter(Boolean);
+  doc.images = nextImages;
 
   if (!normalizeImagePath(doc.mainImage)) {
     doc.mainImage = doc.images[0] || "";
@@ -929,15 +1039,6 @@ exports.removeProductImage = async (productId, imageUrl) => {
   }
 
   const normalizedUrl = normalizeImagePath(imageUrl);
-  const allowedPrefix = `/images/products/${productId}/`;
-
-  if (!normalizedUrl.startsWith(allowedPrefix)) {
-    return {
-      success: false,
-      code: 400,
-      message: "Invalid imageUrl",
-    };
-  }
 
   const doc = await productModel.findById(productId);
   if (!doc) {
@@ -949,9 +1050,9 @@ exports.removeProductImage = async (productId, imageUrl) => {
   }
 
   const current = Array.isArray(doc.images) ? doc.images : [];
-  const removeIndex = current.findIndex(
-    (x) => normalizeImagePath(x) === normalizedUrl
-  );
+  const normalizedCurrent = current.map((x) => normalizeImagePath(x)).filter(Boolean);
+
+  const removeIndex = normalizedCurrent.findIndex((x) => x === normalizedUrl);
 
   if (removeIndex === -1) {
     return {
@@ -961,8 +1062,8 @@ exports.removeProductImage = async (productId, imageUrl) => {
     };
   }
 
-  current.splice(removeIndex, 1);
-  doc.images = current.map(normalizeImagePath).filter(Boolean);
+  normalizedCurrent.splice(removeIndex, 1);
+  doc.images = normalizedCurrent;
 
   if (normalizeImagePath(doc.mainImage) === normalizedUrl) {
     doc.mainImage = doc.images[0] || "";
@@ -973,6 +1074,20 @@ exports.removeProductImage = async (productId, imageUrl) => {
   }
 
   await doc.save();
+
+  if (!isLocalProductImagePath(normalizedUrl, productId)) {
+    return {
+      success: true,
+      code: 200,
+      message: "Product image removed from DB",
+      result: {
+        productId: String(doc._id),
+        images: doc.images,
+        mainImage: doc.mainImage,
+        thumbnail: doc.thumbnail,
+      },
+    };
+  }
 
   const relative = normalizedUrl.replace(/^\/+/, "");
   const roots = [
