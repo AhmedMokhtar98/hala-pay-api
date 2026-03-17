@@ -155,7 +155,16 @@
 
     "required_image": "Image file is required",
     "requiredCreator": "Creator is required",
-    "invalid_or_expired_invite": "Invalid or expired group invite link"
+    "required_token": "Token is required.",
+    "invalid_or_expired_invite": "Invalid or expired invite link.",
+    "group_inactive": "This group is inactive.",
+    "required_deadline": "Group deadline is required.",
+    "group_deadline_passed": "This group deadline has already passed.",
+    "group_closed": "This group is closed and can no longer be joined.",
+    "group_deleted": "This group is no longer available.",
+    "group_funded": "This group has already been fully funded.",
+    "group_purchased": "This item has already been purchased.",
+    "group_already_joined": "You have already joined this group."
   },
   "success": {
     "record_updated": "Record updated successfully",

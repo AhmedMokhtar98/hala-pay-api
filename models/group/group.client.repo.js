@@ -14,7 +14,7 @@ const {
 const groupModel = require("./group.model");
 const productModel = require("../product/product.model"); // adjust if needed
 const { generateGroupInviteToken, verifyGroupInviteToken } = require("../../helpers/jwt.helper");
-const { normalizeAssetUrl } = require("../../helpers/url.helper");
+const { normalizeAssetUrl, normalizeFields } = require("../../helpers/url.helper");
 
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 
@@ -562,51 +562,93 @@ exports.getGroupInviteLink = async (clientId, groupId) => {
 
 // ____________________  J O I N  G R O U P  B Y  T O K E N __________________________ //
 
-
 exports.joinGroupByToken = async (clientId, token) => {
   if (!clientId) throw new BadRequestException("errors.unauthorized");
   if (!token) throw new BadRequestException("errors.required_token");
 
-  // ✅ verify token => gives { gid, exp, ... }
   const decoded = verifyGroupInviteToken(token);
   const groupId = decoded?.gid;
-  if (!groupId) throw new ForbiddenException("errors.invalid_or_expired_invite");
+
+  if (!groupId) {
+    throw new ForbiddenException("errors.invalid_or_expired_invite");
+  }
 
   const group = await groupModel
     .findById(groupId)
-    .select({ _id: 1, creator: 1, contributors: 1, status: 1, isActive: 1, deadLine: 1 })
+    .select({
+      _id: 1,
+      creator: 1,
+      contributors: 1,
+      status: 1,
+      isActive: 1,
+      deadLine: 1,
+    })
     .lean();
 
-  if (!group) throw new NotFoundException("errors.group_not_found");
-
-  if (group.isActive === false) throw new ForbiddenException("errors.group_inactive");
-  if (group.status && String(group.status) !== "active") {
-    throw new ForbiddenException("errors.group_inactive");
+  if (!group) {
+    throw new NotFoundException("errors.group_not_found");
   }
 
-  // ✅ enforce DB deadLine too (in case it changed after token issued)
-  if (!group.deadLine) throw new ForbiddenException("errors.required_deadline");
-  const dlMs = new Date(group.deadLine).getTime();
-  if (!Number.isFinite(dlMs)) throw new ForbiddenException("errors.required_deadline");
-  if (Date.now() > dlMs) throw new ForbiddenException("errors.group_deadline_passed");
+  const groupStatus = String(group.status || "").toLowerCase();
 
-  // extra hardening: reject token if its exp > DB deadline
+  const disabledStatusesMap = {
+    closed: "errors.group_closed",
+    deleted: "errors.group_deleted",
+    funded: "errors.group_funded",
+    purchased: "errors.group_purchased",
+  };
+
+  const disabledStatusMessageKey = disabledStatusesMap[groupStatus] || null;
+
+  // enforce DB deadLine too
+  if (!group.deadLine) {
+    throw new ForbiddenException("errors.required_deadline");
+  }
+
+  const dlMs = new Date(group.deadLine).getTime();
+
+  if (!Number.isFinite(dlMs)) {
+    throw new ForbiddenException("errors.required_deadline");
+  }
+
   const dlSec = Math.floor(dlMs / 1000);
+
   if (decoded.exp && dlSec && decoded.exp > dlSec) {
     throw new ForbiddenException("errors.invalid_or_expired_invite");
   }
 
+  const doc = await populateGroupQuery(groupModel.findById(groupId)).lean();
+
+  if (!doc) {
+    throw new NotFoundException("errors.group_not_found");
+  }
+
+  if (disabledStatusMessageKey) {
+    throw new BadRequestException(disabledStatusMessageKey, { result: doc });
+  }
+
+  if (group.isActive === false) {
+    throw new ForbiddenException("errors.group_inactive");
+  }
+
+  if (group.status && String(group.status) !== "active") {
+    throw new ForbiddenException("errors.group_inactive");
+  }
+
+  if (Date.now() > dlMs) {
+    throw new ForbiddenException("errors.group_deadline_passed");
+  }
+
   const isCreator = String(group.creator) === String(clientId);
+
   const alreadyContributor = Array.isArray(group.contributors)
     ? group.contributors.some((c) => String(c?.client) === String(clientId))
     : false;
 
   if (isCreator || alreadyContributor) {
-    const doc = await populateGroupQuery(groupModel.findById(groupId)).lean();
-    return { success: true, code: 200, result: doc };
+    throw new BadRequestException("errors.group_already_joined");
   }
 
-  // ✅ push contributor safely (no duplicates)
   await groupModel.updateOne(
     { _id: groupId, "contributors.client": { $ne: clientId } },
     {
@@ -621,6 +663,133 @@ exports.joinGroupByToken = async (clientId, token) => {
     }
   );
 
+  const updatedDoc = await populateGroupQuery(groupModel.findById(groupId)).lean();
+
+  return {
+    success: true,
+    code: 200,
+    result: updatedDoc,
+  };
+};
+
+
+exports.getGroupDetailsByInviteToken = async (token, options = {}) => {
+  const {
+    enforceActive = true,
+    enforceDeadline = true,
+    validateTokenDeadlineAgainstGroupDeadline = true,
+  } = options;
+
+  if (!token) {
+    throw new BadRequestException("errors.required_token");
+  }
+
+  const decoded = verifyGroupInviteToken(token);
+  const groupId = decoded?.gid;
+
+  if (!groupId) {
+    throw new ForbiddenException("errors.invalid_or_expired_invite");
+  }
+
+  const group = await groupModel
+    .findById(groupId)
+    .select({
+      _id: 1,
+      creator: 1,
+      contributors: 1,
+      status: 1,
+      isActive: 1,
+      deadLine: 1,
+    })
+    .lean();
+
+  if (!group) {
+    throw new NotFoundException("errors.group_not_found");
+  }
+
+  const groupStatus = String(group.status || "").toLowerCase();
+
+  const disabledStatusesMap = {
+    closed: "errors.group_closed",
+    deleted: "errors.group_deleted",
+    funded: "errors.group_funded",
+    purchased: "errors.group_purchased",
+  };
+
+  const disabledStatusMessageKey = disabledStatusesMap[groupStatus] || null;
+
+  let dlMs = null;
+
+  if (enforceDeadline || validateTokenDeadlineAgainstGroupDeadline) {
+    if (!group.deadLine) {
+      throw new ForbiddenException("errors.required_deadline");
+    }
+
+    dlMs = new Date(group.deadLine).getTime();
+
+    if (!Number.isFinite(dlMs)) {
+      throw new ForbiddenException("errors.required_deadline");
+    }
+  }
+
+  const dlSec = dlMs ? Math.floor(dlMs / 1000) : null;
+
+  if (validateTokenDeadlineAgainstGroupDeadline) {
+    if (decoded.exp && dlSec && decoded.exp > dlSec) {
+      throw new ForbiddenException("errors.invalid_or_expired_invite");
+    }
+  }
+
+  if (!disabledStatusMessageKey && enforceActive) {
+    if (group.isActive === false) {
+      throw new ForbiddenException("errors.group_inactive");
+    }
+
+    if (group.status && String(group.status) !== "active") {
+      throw new ForbiddenException("errors.group_inactive");
+    }
+  }
+
+  if (!disabledStatusMessageKey && enforceDeadline && Date.now() > dlMs) {
+    throw new ForbiddenException("errors.group_deadline_passed");
+  }
+
   const doc = await populateGroupQuery(groupModel.findById(groupId)).lean();
-  return { success: true, code: 200, result: doc };
+
+  if (!doc) {
+    throw new NotFoundException("errors.group_not_found");
+  }
+
+  const { contributors, ...resultWithoutContributors } = doc;
+
+  const result = normalizeFields(resultWithoutContributors, ["image"]);
+
+  if (result.creator && typeof result.creator === "object") {
+    result.creator = normalizeFields(result.creator, ["image"]);
+  }
+
+  if (result.store && typeof result.store === "object") {
+    result.store = normalizeFields(result.store, ["logo"]);
+  }
+
+  if (
+    result.product &&
+    typeof result.product === "object" &&
+    Array.isArray(result.product.images)
+  ) {
+    result.product = {
+      ...result.product,
+      images: result.product.images.map((img) => normalizeAssetUrl(img)),
+    };
+  }
+
+  if (disabledStatusMessageKey) {
+    throw new BadRequestException(disabledStatusMessageKey);
+  }
+
+  return {
+    success: true,
+    code: 200,
+    result,
+  };
 };

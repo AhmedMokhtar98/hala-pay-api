@@ -28,6 +28,7 @@ router.put( "/image", validator(uploadGroupImageValidation), groupImageUpload.si
 router.delete( "/image/remove", validator(removeGroupImageValidation), errorHandler(groupController.removeGroupImage) );
 
 router.get("/link", validator(getGroupInviteLinkValidation), errorHandler(groupController.getGroupInviteLink));
+router.get("/group-overview", validator(joinGroupByTokenValidation), errorHandler(groupController.getGroupDetailsByInviteToken));
 router.post("/join", validator(joinGroupByTokenValidation), errorHandler(groupController.joinGroupByToken));
 
 

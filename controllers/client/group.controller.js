@@ -103,3 +103,10 @@ exports.joinGroupByToken = async (req, res) => {
   const op = await groupRepo.joinGroupByToken(clientId, token);
   return res.status(op.code).json(op);
 };
+
+
+exports.getGroupDetailsByInviteToken = async (req, res) => {
+  const token = req.query.token || req.body.token;
+  const op = await groupRepo.getGroupDetailsByInviteToken(token);
+  return res.status(op.code).json(op);
+};

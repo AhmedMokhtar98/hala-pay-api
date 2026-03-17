@@ -165,7 +165,16 @@
 
     "required_image": "ملف الصورة مطلوب",
     "requiredCreator": "المُنشئ مطلوب",
-    "invalid_or_expired_invite": "رابط دعوة المجموعة غير صالح أو منتهي الصلاحية"
+    "required_token": "الرمز مطلوب.",
+    "invalid_or_expired_invite": "رابط الدعوة غير صالح أو منتهي الصلاحية.",
+    "group_inactive": "هذه المجموعة غير نشطة.",
+    "required_deadline": "موعد انتهاء المجموعة مطلوب.",
+    "group_deadline_passed": "انتهى موعد هذه المجموعة بالفعل.",
+    "group_closed": "هذه المجموعة مغلقة ولم يعد بالإمكان الانضمام إليها.",
+    "group_deleted": "هذه المجموعة لم تعد متاحة.",
+    "group_funded": "تم تمويل هذه المجموعة بالكامل بالفعل.",
+    "group_purchased": "تم شراء هذا المنتج بالفعل.",
+    "group_already_joined": "لقد انضممت بالفعل إلى هذه المجموعة."
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",
