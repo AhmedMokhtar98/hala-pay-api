@@ -56,7 +56,6 @@ function isAdminRole(role) {
   return ["admin", "superadmin"].includes(normalizedRole);
 }
 
-
 function parseBooleanLike(value) {
   const s = String(value ?? "").trim().toLowerCase();
 
@@ -65,6 +64,21 @@ function parseBooleanLike(value) {
   if (["false", "0", "no"].includes(s)) return false;
 
   return null;
+}
+
+function mergeAnd(query, cond) {
+  if (!cond) return query || {};
+  if (!query || typeof query !== "object" || !Object.keys(query).length) return cond;
+
+  if (Array.isArray(query.$and)) {
+    return { ...query, $and: [...query.$and, cond] };
+  }
+
+  return { $and: [query, cond] };
+}
+
+function impossibleQuery() {
+  return { _id: { $exists: false } };
 }
 
 /**
@@ -103,7 +117,7 @@ function parseMulti(v) {
 /* ======================================================
    GET STORE (supports store.provider AND store.providers[])
 ====================================================== */
-async function getStoreByProviderStoreId(providerStoreId, providerNameOptional) {
+async function getStoreByProviderStoreId(providerStoreId, providerNameOptional, role = "") {
   const storeId = toStr(providerStoreId);
   if (!storeId) {
     const err = new NotFoundException("providerStoreId is required to resolve store");
@@ -115,9 +129,11 @@ async function getStoreByProviderStoreId(providerStoreId, providerNameOptional) 
     ? normalizeProviderName(providerNameOptional)
     : "";
 
+  const isAdmin = isAdminRole(role);
+
   const q = providerName
     ? {
-        isActive: true,
+        ...(isAdmin ? {} : { isActive: true }),
         $or: [
           { "provider.storeId": storeId, "provider.name": providerName },
           {
@@ -128,7 +144,7 @@ async function getStoreByProviderStoreId(providerStoreId, providerNameOptional) 
         ],
       }
     : {
-        isActive: true,
+        ...(isAdmin ? {} : { isActive: true }),
         $or: [{ "provider.storeId": storeId }, { "providers.storeId": storeId }],
       };
 
@@ -201,6 +217,74 @@ function applyProviderFilterToQuery(query, filters) {
     return { ...query, $and: [...query.$and, cond] };
   }
   return { $and: [query, cond] };
+}
+
+/* ======================================================
+   ROLE VISIBILITY FILTERS
+   - non-admin:
+     * product.isActive must be true (already handled in query builder)
+     * store must be active
+     * category must not be inactive-only
+====================================================== */
+async function applyRoleVisibilityToQuery(query, { role = "", storeId = null } = {}) {
+  if (isAdminRole(role)) return query;
+
+  let storeCond = null;
+
+  if (storeId) {
+    const activeStore = await Stores.exists({
+      _id: storeId,
+      isActive: true,
+    });
+
+    if (!activeStore) {
+      return impossibleQuery();
+    }
+
+    storeCond = { store: storeId };
+  } else {
+    const activeStores = await Stores.find({ isActive: true }).select("_id").lean();
+    const activeStoreIds = activeStores.map((x) => x._id);
+
+    if (!activeStoreIds.length) {
+      return impossibleQuery();
+    }
+
+    storeCond = { store: { $in: activeStoreIds } };
+  }
+
+  const categoryQuery = { isActive: true };
+  if (storeId) categoryQuery.store = storeId;
+
+  const activeCategories = await Categories.find(categoryQuery).select("_id").lean();
+  const activeCategoryIds = activeCategories.map((x) => x._id);
+
+  const topCategoryOr = [
+    { category: { $exists: false } },
+    { category: null },
+  ];
+
+  const nestedCategoryOr = [
+    { categories: { $exists: false } },
+    { categories: { $size: 0 } },
+    { categories: { $not: { $elemMatch: { categoryRef: { $ne: null } } } } },
+  ];
+
+  if (activeCategoryIds.length) {
+    topCategoryOr.push({ category: { $in: activeCategoryIds } });
+    nestedCategoryOr.push({
+      categories: { $elemMatch: { categoryRef: { $in: activeCategoryIds } } },
+    });
+  }
+
+  const categoryCond = {
+    $and: [
+      { $or: topCategoryOr },
+      { $or: nestedCategoryOr },
+    ],
+  };
+
+  return mergeAnd(mergeAnd(query, storeCond), categoryCond);
 }
 
 /* ======================================================
@@ -484,6 +568,21 @@ function normalizeProductDoc(p) {
   };
 }
 
+function buildStorePopulateMatch(role) {
+  if (isAdminRole(role)) return undefined;
+  return { isActive: true };
+}
+
+function buildCategoryPopulateMatch(role, storeId = null) {
+  if (isAdminRole(role)) {
+    return storeId ? { store: storeId } : undefined;
+  }
+
+  return storeId
+    ? { isActive: true, store: storeId }
+    : { isActive: true };
+}
+
 /* ======================================================
    DB LIST
 ====================================================== */
@@ -495,15 +594,11 @@ async function listProductsFromDb({ store, filters, role = "" }) {
     storeId,
     role
   );
-  console.log("roleee",role)
+
   const q1 = applyProviderFilterToQuery(query, filters);
   const providerName = normalizeProviderName(filters?.provider);
-  const finalQuery = await applyCategoryFilterToQuery(
-    q1,
-    filters,
-    storeId,
-    providerName
-  );
+  const q2 = await applyCategoryFilterToQuery(q1, filters, storeId, providerName);
+  const finalQuery = await applyRoleVisibilityToQuery(q2, { role, storeId });
 
   const mustHave = { store: 1, categories: 1, raw: 1 };
   const finalProjection = (() => {
@@ -516,9 +611,8 @@ async function listProductsFromDb({ store, filters, role = "" }) {
     return { ...projection, ...mustHave };
   })();
 
-  const categoryPopulateMatch = storeId
-    ? { isActive: true, store: storeId }
-    : { isActive: true };
+  const storePopulateMatch = buildStorePopulateMatch(role);
+  const categoryPopulateMatch = buildCategoryPopulateMatch(role, storeId);
 
   const [items, count] = await Promise.all([
     Products.find(finalQuery)
@@ -529,18 +623,20 @@ async function listProductsFromDb({ store, filters, role = "" }) {
       .populate({
         path: "store",
         select: "businessName domain provider providers isActive logo",
-        match: { isActive: true },
+        ...(storePopulateMatch ? { match: storePopulateMatch } : {}),
       })
       .populate({
         path: "categories.categoryRef",
-        match: categoryPopulateMatch,
-        select: "nameEn nameAr image isActive",
+        select: "nameEn nameAr image isActive store",
+        ...(categoryPopulateMatch ? { match: categoryPopulateMatch } : {}),
       })
       .lean(),
     Products.countDocuments(finalQuery),
   ]);
 
-  const cleaned = (items || []).filter((p) => p.store).map(normalizeProductDoc);
+  const cleaned = (items || [])
+    .filter((p) => (isAdminRole(role) ? true : !!p.store))
+    .map(normalizeProductDoc);
 
   return {
     success: true,
@@ -568,7 +664,7 @@ async function getProductFromDbById({ productId, store, filters = {}, role = "" 
   const isAdmin = isAdminRole(role);
   const requestedIsActive = parseBooleanLike(filters.isActive);
 
-  const query = {
+  let query = {
     _id: new mongoose.Types.ObjectId(id),
   };
 
@@ -583,24 +679,25 @@ async function getProductFromDbById({ productId, store, filters = {}, role = "" 
     query.isActive = true;
   }
 
-  const categoryPopulateMatch = storeId
-    ? { isActive: true, store: storeId }
-    : { isActive: true };
+  query = await applyRoleVisibilityToQuery(query, { role, storeId });
+
+  const storePopulateMatch = buildStorePopulateMatch(role);
+  const categoryPopulateMatch = buildCategoryPopulateMatch(role, storeId);
 
   const doc = await Products.findOne(query)
     .populate({
       path: "store",
       select: "businessName domain provider providers isActive logo",
-      match: { isActive: true },
+      ...(storePopulateMatch ? { match: storePopulateMatch } : {}),
     })
     .populate({
       path: "categories.categoryRef",
-      match: categoryPopulateMatch,
-      select: "nameEn nameAr image isActive",
+      select: "nameEn nameAr image isActive store",
+      ...(categoryPopulateMatch ? { match: categoryPopulateMatch } : {}),
     })
     .lean();
 
-  if (!doc || !doc.store) {
+  if (!doc || (!isAdmin && !doc.store)) {
     const err = new NotFoundException("Product not found");
     err.status = 404;
     throw err;
@@ -695,7 +792,11 @@ async function listUnifiedProducts({
 
   const store =
     storeFromReq ||
-    (await getStoreByProviderStoreId(storeIdFromArg, providerNameFromQuery || null));
+    (await getStoreByProviderStoreId(
+      storeIdFromArg,
+      providerNameFromQuery || null,
+      role
+    ));
 
   const { providerName, storeForAdapter } = pickProviderFromStore(
     store,
@@ -805,7 +906,11 @@ async function getUnifiedProductById({
 
   const store =
     storeFromReq ||
-    (await getStoreByProviderStoreId(storeIdFromArg, providerNameFromQuery || null));
+    (await getStoreByProviderStoreId(
+      storeIdFromArg,
+      providerNameFromQuery || null,
+      role
+    ));
 
   const { providerName } = pickProviderFromStore(
     store,

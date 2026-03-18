@@ -1,4 +1,3 @@
-// services/products/unifiedProducts.query.js
 const mongoose = require("mongoose");
 const { toPositiveInt, normalizeText } = require("../../../utils/helpers");
 
@@ -54,12 +53,10 @@ function normProvider(v) {
   return s;
 }
 
-
 function isAdminRole(role) {
   const normalizedRole = String(role || "").toLowerCase().trim();
   return ["admin", "superadmin"].includes(normalizedRole);
 }
-
 
 function parseBooleanLike(value) {
   const s = String(value ?? "").trim().toLowerCase();
