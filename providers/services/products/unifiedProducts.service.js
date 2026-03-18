@@ -52,8 +52,10 @@ function escapeRegex(str) {
 }
 
 function isAdminRole(role) {
-  return String(role || "").toLowerCase().trim() === "admin" || String(role || "").toLowerCase().trim() === "superAdmin";
+  const normalizedRole = String(role || "").toLowerCase().trim();
+  return ["admin", "superadmin"].includes(normalizedRole);
 }
+
 
 function parseBooleanLike(value) {
   const s = String(value ?? "").trim().toLowerCase();
@@ -493,7 +495,7 @@ async function listProductsFromDb({ store, filters, role = "" }) {
     storeId,
     role
   );
-
+  console.log("roleee",role)
   const q1 = applyProviderFilterToQuery(query, filters);
   const providerName = normalizeProviderName(filters?.provider);
   const finalQuery = await applyCategoryFilterToQuery(

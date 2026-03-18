@@ -14,7 +14,7 @@ exports.listProducts = async (req, res) => {
   const provider = String(req.query.provider || "").toLowerCase().trim();
   const providerStoreId = String(req.query.storeId || "").trim();
   const role = req?.user?.role;
-
+  console.log("role", role);
   // ✅ keep provider in filters only if provided
   const filters = { ...req.query };
   if (provider) filters.provider = provider;

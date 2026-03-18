@@ -54,9 +54,12 @@ function normProvider(v) {
   return s;
 }
 
+
 function isAdminRole(role) {
-  return String(role || "").toLowerCase().trim() === "admin" || String(role || "").toLowerCase().trim() === "superAdmin";
+  const normalizedRole = String(role || "").toLowerCase().trim();
+  return ["admin", "superadmin"].includes(normalizedRole);
 }
+
 
 function parseBooleanLike(value) {
   const s = String(value ?? "").trim().toLowerCase();
