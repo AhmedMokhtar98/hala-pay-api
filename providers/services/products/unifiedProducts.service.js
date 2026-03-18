@@ -51,6 +51,20 @@ function escapeRegex(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function isAdminRole(role) {
+  return String(role || "").toLowerCase().trim() === "admin" || String(role || "").toLowerCase().trim() === "superAdmin";
+}
+
+function parseBooleanLike(value) {
+  const s = String(value ?? "").trim().toLowerCase();
+
+  if (!s || s === "all" || s === "null" || s === "undefined") return null;
+  if (["true", "1", "yes"].includes(s)) return true;
+  if (["false", "0", "no"].includes(s)) return false;
+
+  return null;
+}
+
 /**
  * parseMulti supports:
  * - "id1,id2"
@@ -471,12 +485,13 @@ function normalizeProductDoc(p) {
 /* ======================================================
    DB LIST
 ====================================================== */
-async function listProductsFromDb({ store, filters }) {
+async function listProductsFromDb({ store, filters, role = "" }) {
   const storeId = store?._id || null;
 
   const { query, page, limit, skip, sort, projection } = buildProductsDbQuery(
     filters,
-    storeId
+    storeId,
+    role
   );
 
   const q1 = applyProviderFilterToQuery(query, filters);
@@ -538,7 +553,7 @@ async function listProductsFromDb({ store, filters }) {
 /* ======================================================
    GET PRODUCT BY DB _id
 ====================================================== */
-async function getProductFromDbById({ productId, store, filters = {} }) {
+async function getProductFromDbById({ productId, store, filters = {}, role = "" }) {
   const id = toStr(productId);
   if (!isObjectId(id)) {
     const err = new NotFoundException("Product not found");
@@ -548,14 +563,23 @@ async function getProductFromDbById({ productId, store, filters = {} }) {
 
   const storeId = store?._id || null;
   const providerName = normalizeProviderName(filters?.provider);
+  const isAdmin = isAdminRole(role);
+  const requestedIsActive = parseBooleanLike(filters.isActive);
 
   const query = {
     _id: new mongoose.Types.ObjectId(id),
-    isActive: true,
   };
 
   if (storeId) query.store = storeId;
   if (providerName) query.provider = providerName;
+
+  if (isAdmin) {
+    if (requestedIsActive !== null) {
+      query.isActive = requestedIsActive;
+    }
+  } else {
+    query.isActive = true;
+  }
 
   const categoryPopulateMatch = storeId
     ? { isActive: true, store: storeId }
@@ -643,7 +667,12 @@ async function fetchProviderProductsPaged({ adapter, storeForAdapter, filters, m
 /* ======================================================
    MAIN ENTRY - LIST
 ====================================================== */
-async function listUnifiedProducts({ providerStoreId, filters = {}, store: storeFromReq }) {
+async function listUnifiedProducts({
+  providerStoreId,
+  filters = {},
+  store: storeFromReq,
+  role = "",
+}) {
   const providerNameFromQuery = normalizeProviderName(filters.provider);
   const storeIdFromArg = toStr(providerStoreId);
 
@@ -658,7 +687,7 @@ async function listUnifiedProducts({ providerStoreId, filters = {}, store: store
       throw err;
     }
 
-    const dbResp = await listProductsFromDb({ store: null, filters });
+    const dbResp = await listProductsFromDb({ store: null, filters, role });
     return { ...dbResp, sync: null };
   }
 
@@ -735,7 +764,11 @@ async function listUnifiedProducts({ providerStoreId, filters = {}, store: store
 
   const effectiveFilters = { ...filters, provider: providerName };
 
-  const dbResp = await listProductsFromDb({ store, filters: effectiveFilters });
+  const dbResp = await listProductsFromDb({
+    store,
+    filters: effectiveFilters,
+    role,
+  });
 
   return {
     ...dbResp,
@@ -751,6 +784,7 @@ async function getUnifiedProductById({
   providerStoreId,
   filters = {},
   store: storeFromReq,
+  role = "",
 }) {
   const providerNameFromQuery = normalizeProviderName(filters.provider);
   const storeIdFromArg = toStr(providerStoreId);
@@ -763,6 +797,7 @@ async function getUnifiedProductById({
       productId,
       store: null,
       filters,
+      role,
     });
   }
 
@@ -788,6 +823,7 @@ async function getUnifiedProductById({
     productId,
     store,
     filters: effectiveFilters,
+    role,
   });
 }
 

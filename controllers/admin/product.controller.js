@@ -13,6 +13,7 @@ exports.createProduct = async (req, res) => {
 exports.listProducts = async (req, res) => {
   const provider = String(req.query.provider || "").toLowerCase().trim();
   const providerStoreId = String(req.query.storeId || "").trim();
+  const role = req?.user?.role;
 
   // ✅ keep provider in filters only if provided
   const filters = { ...req.query };
@@ -22,6 +23,7 @@ exports.listProducts = async (req, res) => {
     providerStoreId: providerStoreId || null,
     filters,
     store: req.store || null, // ✅ set by middleware (optional)
+    role, // ✅ set by middleware (optional)
   });
 
   return res.status(result?.code || 200).json(result);
@@ -31,12 +33,14 @@ exports.listProducts = async (req, res) => {
 
 exports.getProductDetails = async (req, res) => {
   const { productId } = req.params;
+  const role = req?.user?.role;
 
   const operationResultObject = await getUnifiedProductById({
     productId,
     providerStoreId: req.query.storeId || req.query.providerStoreId,
     filters: req.query,
     store: req.store,
+    role, // ✅ set by middleware (optional)
   });
 
   return res.status(operationResultObject.code).json(operationResultObject);

@@ -37,6 +37,7 @@ function parseSort(sortRaw) {
     "priceBefore.amount",
     "salePrice.amount",
     "stock",
+    "isActive",
   ]);
 
   if (!allowed.has(field)) return { createdAt: -1 };
@@ -53,11 +54,25 @@ function normProvider(v) {
   return s;
 }
 
+function isAdminRole(role) {
+  return String(role || "").toLowerCase().trim() === "admin" || String(role || "").toLowerCase().trim() === "superAdmin";
+}
+
+function parseBooleanLike(value) {
+  const s = String(value ?? "").trim().toLowerCase();
+
+  if (!s || s === "all" || s === "null" || s === "undefined") return null;
+  if (["true", "1", "yes"].includes(s)) return true;
+  if (["false", "0", "no"].includes(s)) return false;
+
+  return null;
+}
+
 /**
  * Build Mongo query for unified products DB
  * Category filtering is handled ONLY in unifiedProducts.service.js
  */
-function buildProductsDbQuery(filters = {}, storeObjectId) {
+function buildProductsDbQuery(filters = {}, storeObjectId, role = "") {
   const page = toPositiveInt(filters.page, 1);
   const limit = clampInt(
     toPositiveInt(filters.limit ?? filters.per_page ?? filters.perPage, 20),
@@ -69,10 +84,10 @@ function buildProductsDbQuery(filters = {}, storeObjectId) {
   const keyword = normalizeText(filters.keyword || filters.search || filters.q);
   const status = normalizeUnifiedStatus(filters.status);
   const provider = normProvider(filters.provider);
+  const requestedIsActive = parseBooleanLike(filters.isActive);
+  const isAdmin = isAdminRole(role);
 
-  const query = {
-    isActive: true,
-  };
+  const query = {};
 
   if (storeObjectId && mongoose.Types.ObjectId.isValid(String(storeObjectId))) {
     query.store = new mongoose.Types.ObjectId(String(storeObjectId));
@@ -84,6 +99,14 @@ function buildProductsDbQuery(filters = {}, storeObjectId) {
 
   if (status) {
     query.status = status;
+  }
+
+  if (isAdmin) {
+    if (requestedIsActive !== null) {
+      query.isActive = requestedIsActive;
+    }
+  } else {
+    query.isActive = true;
   }
 
   const and = [];
