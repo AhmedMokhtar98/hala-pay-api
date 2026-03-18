@@ -226,7 +226,10 @@ function applyProviderFilterToQuery(query, filters) {
      * store must be active
      * category must not be inactive-only
 ====================================================== */
-async function applyRoleVisibilityToQuery(query, { role = "", storeId = null } = {}) {
+async function applyRoleVisibilityToQuery(
+  query,
+  { role = "", storeId = null, providerName = "" } = {}
+) {
   if (isAdminRole(role)) return query;
 
   let storeCond = null;
@@ -255,38 +258,95 @@ async function applyRoleVisibilityToQuery(query, { role = "", storeId = null } =
 
   const categoryQuery = { isActive: true };
   if (storeId) categoryQuery.store = storeId;
+  if (providerName) categoryQuery.provider = providerName;
 
-  const activeCategories = await Categories.find(categoryQuery).select("_id").lean();
+  const activeCategories = await Categories.find(categoryQuery)
+    .select("_id store provider providerCategoryId")
+    .lean();
+
   const activeCategoryIds = activeCategories.map((x) => x._id);
 
-  const topCategoryOr = [
-    { category: { $exists: false } },
-    { category: null },
-  ];
+  const activeProviderCategoryIds = activeCategories
+    .map((x) => toStr(x.providerCategoryId))
+    .filter(Boolean);
 
-  const nestedCategoryOr = [
-    { categories: { $exists: false } },
-    { categories: { $size: 0 } },
-    { categories: { $not: { $elemMatch: { categoryRef: { $ne: null } } } } },
-  ];
-
-  if (activeCategoryIds.length) {
-    topCategoryOr.push({ category: { $in: activeCategoryIds } });
-    nestedCategoryOr.push({
-      categories: { $elemMatch: { categoryRef: { $in: activeCategoryIds } } },
-    });
-  }
-
-  const categoryCond = {
-    $and: [
-      { $or: topCategoryOr },
-      { $or: nestedCategoryOr },
+  const topLevelCategoryCond = {
+    $or: [
+      { category: { $exists: false } },
+      { category: null },
+      ...(activeCategoryIds.length ? [{ category: { $in: activeCategoryIds } }] : []),
     ],
   };
 
-  return mergeAnd(mergeAnd(query, storeCond), categoryCond);
-}
+  const nestedCategoryHasNoLinkedRefsCond = {
+    $or: [
+      { categories: { $exists: false } },
+      { categories: { $size: 0 } },
+      {
+        categories: {
+          $not: {
+            $elemMatch: {
+              $or: [
+                { categoryRef: { $exists: true, $ne: null } },
+                { providerCategoryId: { $exists: true, $nin: [null, ""] } },
+              ],
+            },
+          },
+        },
+      },
+    ],
+  };
 
+  const nestedCategoryActiveOr = [];
+
+  if (activeCategoryIds.length) {
+    nestedCategoryActiveOr.push({
+      categories: {
+        $elemMatch: {
+          categoryRef: { $in: activeCategoryIds },
+        },
+      },
+    });
+  }
+
+  if (storeId && providerName) {
+    if (activeProviderCategoryIds.length) {
+      nestedCategoryActiveOr.push({
+        categories: {
+          $elemMatch: {
+            providerCategoryId: { $in: activeProviderCategoryIds },
+          },
+        },
+      });
+    }
+  } else {
+    const comboOr = activeCategories
+      .filter((x) => toStr(x.providerCategoryId))
+      .map((x) => {
+        const conds = [
+          { store: x.store },
+          { categories: { $elemMatch: { providerCategoryId: toStr(x.providerCategoryId) } } },
+        ];
+
+        const p = normalizeProviderName(x.provider);
+        if (p) conds.push({ provider: p });
+
+        return conds.length === 1 ? conds[0] : { $and: conds };
+      });
+
+    if (comboOr.length) {
+      nestedCategoryActiveOr.push({ $or: comboOr });
+    }
+  }
+
+  const nestedCategoryCond = {
+    $or: [nestedCategoryHasNoLinkedRefsCond, ...nestedCategoryActiveOr],
+  };
+
+  return mergeAnd(mergeAnd(query, storeCond), {
+    $and: [topLevelCategoryCond, nestedCategoryCond],
+  });
+}
 /* ======================================================
    CATEGORY FILTERING (SMART LOOSE MATCH)
    - one word   => partial contains match
@@ -598,7 +658,12 @@ async function listProductsFromDb({ store, filters, role = "" }) {
   const q1 = applyProviderFilterToQuery(query, filters);
   const providerName = normalizeProviderName(filters?.provider);
   const q2 = await applyCategoryFilterToQuery(q1, filters, storeId, providerName);
-  const finalQuery = await applyRoleVisibilityToQuery(q2, { role, storeId });
+
+  const finalQuery = await applyRoleVisibilityToQuery(q2, {
+    role,
+    storeId,
+    providerName,
+  });
 
   const mustHave = { store: 1, categories: 1, raw: 1 };
   const finalProjection = (() => {
@@ -627,7 +692,7 @@ async function listProductsFromDb({ store, filters, role = "" }) {
       })
       .populate({
         path: "categories.categoryRef",
-        select: "nameEn nameAr image isActive store",
+        select: "nameEn nameAr image isActive store provider providerCategoryId",
         ...(categoryPopulateMatch ? { match: categoryPopulateMatch } : {}),
       })
       .lean(),
@@ -679,7 +744,11 @@ async function getProductFromDbById({ productId, store, filters = {}, role = "" 
     query.isActive = true;
   }
 
-  query = await applyRoleVisibilityToQuery(query, { role, storeId });
+  query = await applyRoleVisibilityToQuery(query, {
+    role,
+    storeId,
+    providerName,
+  });
 
   const storePopulateMatch = buildStorePopulateMatch(role);
   const categoryPopulateMatch = buildCategoryPopulateMatch(role, storeId);
@@ -692,7 +761,7 @@ async function getProductFromDbById({ productId, store, filters = {}, role = "" 
     })
     .populate({
       path: "categories.categoryRef",
-      select: "nameEn nameAr image isActive store",
+      select: "nameEn nameAr image isActive store provider providerCategoryId",
       ...(categoryPopulateMatch ? { match: categoryPopulateMatch } : {}),
     })
     .lean();
@@ -709,7 +778,6 @@ async function getProductFromDbById({ productId, store, filters = {}, role = "" 
     result: normalizeProductDoc(doc),
   };
 }
-
 /* ======================================================
    FETCH PROVIDER PRODUCTS (PAGED)
 ====================================================== */
