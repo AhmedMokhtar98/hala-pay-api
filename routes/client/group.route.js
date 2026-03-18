@@ -18,6 +18,7 @@ const {
 
 const { uploadImage } = require("../../multer/uploadImage");
 const normalizeMultiStatus = require("../../middlewares/normalizeMultiStatus");
+const { topUpGroupValidation } = require("../../validations/group.validation");
 const groupImageUpload = uploadImage({ module: "groups", idParam: "_id" });
 // _____________________________________________ ROUTES _________________________________________________ // 
 
@@ -31,7 +32,7 @@ router.get("/link", validator(getGroupInviteLinkValidation), errorHandler(groupC
 router.get("/group-overview", validator(joinGroupByTokenValidation), errorHandler(groupController.getGroupDetailsByInviteToken));
 router.post("/join", validator(joinGroupByTokenValidation), errorHandler(groupController.joinGroupByToken));
 
-
+router.post( "/:groupId/topup", validator(topUpGroupValidation), errorHandler(groupController.topUpGroup) );
 
 
 router.put( "/:_id", validator(updateGroupValidation), errorHandler(groupController.updateGroup) );

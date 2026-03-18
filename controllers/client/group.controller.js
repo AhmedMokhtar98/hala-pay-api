@@ -110,3 +110,12 @@ exports.getGroupDetailsByInviteToken = async (req, res) => {
   const op = await groupRepo.getGroupDetailsByInviteToken(token);
   return res.status(op.code).json(op);
 };
+
+exports.topUpGroup = async (req, res) => {
+  const clientId = req.user?._id;
+  const { groupId } = req.params;
+
+  const op = await groupRepo.topUpGroup(groupId, clientId, req.body);
+
+  return res.status(op.code).json(op);
+};

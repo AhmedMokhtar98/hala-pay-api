@@ -164,7 +164,30 @@
     "group_deleted": "This group is no longer available.",
     "group_funded": "This group has already been fully funded.",
     "group_purchased": "This item has already been purchased.",
-    "group_already_joined": "You have already joined this group."
+    "group_already_joined": "You have already joined this group.",
+    "groupNotFound": "Group not found.",
+    "groupDeleted": "This group has been deleted.",
+    "groupClosed": "This group is closed.",
+    "groupPurchased": "This group has already been purchased.",
+    "groupAlreadyFunded": "This group is already fully funded.",
+    "groupLocked": "This group is locked for purchase.",
+    "groupContributorNotFound": "You are not a contributor in this group.",
+    "amountExceedsRemaining": "The amount exceeds the remaining target amount.",
+    "paymentFailed": "Payment failed.",
+
+    "validAmount": "Amount must be a valid number.",
+    "requiredAmount": "Amount is required.",
+    "invalidAmount": "Amount must be greater than zero.",
+
+    "validTransactionStatus": "Transaction status must be a valid string.",
+    "requiredTransactionStatus": "Transaction status is required.",
+    "emptyTransactionStatus": "Transaction status cannot be empty.",
+    "invalidTransactionStatus": "Transaction status must be either success or failed.",
+
+    "validPaymentMethod": "Payment method must be valid.",
+    "invalidPaymentMethod": "Invalid payment method.",
+
+    "validNote": "Note must be a valid string."
   },
   "success": {
     "record_updated": "Record updated successfully",
@@ -184,6 +207,7 @@
     "hero_slide_image_removed": "Hero slide image removed successfully.",
     "image_updated": "Image updated successfully",
     "image_removed": "Image removed successfully",
-    "logged_out": "Logged out successfully"
+    "logged_out": "Logged out successfully",
+    "groupToppedUp": "Group topped up successfully."
   }
 }

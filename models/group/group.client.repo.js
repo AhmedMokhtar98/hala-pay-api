@@ -12,6 +12,8 @@ const {
 } = require("../../middlewares/errorHandler/exceptions");
 
 const groupModel = require("./group.model");
+const { default: mongoose } = require("mongoose");
+const paymentModel = require("../payment/payment.model");
 const productModel = require("../product/product.model"); // adjust if needed
 const { generateGroupInviteToken, verifyGroupInviteToken } = require("../../helpers/jwt.helper");
 const { normalizeAssetUrl, normalizeFields } = require("../../helpers/url.helper");
@@ -793,3 +795,5 @@ exports.getGroupDetailsByInviteToken = async (token, options = {}) => {
     result,
   };
 };
+
+

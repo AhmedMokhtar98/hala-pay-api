@@ -174,7 +174,31 @@
     "group_deleted": "هذه المجموعة لم تعد متاحة.",
     "group_funded": "تم تمويل هذه المجموعة بالكامل بالفعل.",
     "group_purchased": "تم شراء هذا المنتج بالفعل.",
-    "group_already_joined": "لقد انضممت بالفعل إلى هذه المجموعة."
+    "group_already_joined": "لقد انضممت بالفعل إلى هذه المجموعة.",
+    "groupNotFound": "المجموعة غير موجودة.",
+    "groupDeleted": "تم حذف هذه المجموعة.",
+    "groupClosed": "هذه المجموعة مغلقة.",
+    "groupPurchased": "تم شراء هذه المجموعة بالفعل.",
+    "groupAlreadyFunded": "تم تمويل هذه المجموعة بالكامل بالفعل.",
+    "groupLocked": "هذه المجموعة مقفولة للشراء.",
+    "groupContributorNotFound": "أنت لست مساهمًا في هذه المجموعة.",
+    "amountExceedsRemaining": "المبلغ أكبر من المبلغ المتبقي للوصول للهدف.",
+    "paymentFailed": "فشلت عملية الدفع.",
+
+
+    "validAmount": "يجب أن يكون المبلغ رقمًا صحيحًا.",
+    "requiredAmount": "المبلغ مطلوب.",
+    "invalidAmount": "يجب أن يكون المبلغ أكبر من صفر.",
+
+    "validTransactionStatus": "يجب أن تكون حالة العملية نصًا صالحًا.",
+    "requiredTransactionStatus": "حالة العملية مطلوبة.",
+    "emptyTransactionStatus": "حالة العملية لا يمكن أن تكون فارغة.",
+    "invalidTransactionStatus": "يجب أن تكون حالة العملية success أو failed.",
+
+    "validPaymentMethod": "يجب أن تكون طريقة الدفع صالحة.",
+    "invalidPaymentMethod": "طريقة الدفع غير صالحة.",
+
+    "validNote": "يجب أن تكون الملاحظة نصًا صالحًا."
   },
   "success": {
     "record_updated": "تم تحديث السجل بنجاح",
@@ -194,6 +218,7 @@
     "hero_slide_image_removed": "تم إزالة صورة سلايد الهيرو بنجاح.",
     "image_updated": "تم تحديث الصورة بنجاح",
     "image_removed": "تم حذف الصورة بنجاح",
-    "logged_out": "تم تسجيل الخروج بنجاح"
+    "logged_out": "تم تسجيل الخروج بنجاح",
+    "groupToppedUp": "تم شحن المجموعة بنجاح."
    }
 }
