@@ -617,7 +617,7 @@ exports.joinGroupByToken = async (clientId, token) => {
   const dlSec = Math.floor(dlMs / 1000);
 
   if (decoded.exp && dlSec && decoded.exp > dlSec) {
-    throw new ConflictException("errors.invalid_or_expired_invite");
+    throw new ConflictException("errors.group_deadline_passed");
   }
 
   const doc = await populateGroupQuery(groupModel.findById(groupId)).lean();
