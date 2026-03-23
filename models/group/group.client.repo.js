@@ -81,7 +81,7 @@ async function assertCreatorOrThrow(clientId, groupId) {
   if (owned) return true;
 
   const exists = await groupModel.findById(groupId).select({ _id: 1 }).lean();
-  if (exists) throw new ForbiddenException("errors.forbidden");
+  if (exists) throw new ConflictException("errors.forbidden");
 
   throw new NotFoundException("errors.group_not_found");
 }
@@ -627,7 +627,7 @@ exports.joinGroupByToken = async (clientId, token) => {
   }
 
   if (disabledStatusMessageKey) {
-    throw new BadRequestException(disabledStatusMessageKey, { result: doc });
+    throw new ConflictException(disabledStatusMessageKey, { result: doc });
   }
 
   if (group.isActive === false) {
@@ -649,7 +649,7 @@ exports.joinGroupByToken = async (clientId, token) => {
     : false;
 
   if (isCreator || alreadyContributor) {
-    throw new BadRequestException("errors.group_already_joined");
+    throw new ConflictException("errors.group_already_joined");
   }
 
   await groupModel.updateOne(
@@ -691,7 +691,7 @@ exports.getGroupDetailsByInviteToken = async (token, options = {}) => {
   const groupId = decoded?.gid;
 
   if (!groupId) {
-    throw new ForbiddenException("errors.invalid_or_expired_invite");
+    throw new ConflictException("errors.invalid_or_expired_invite");
   }
 
   const group = await groupModel
@@ -725,13 +725,13 @@ exports.getGroupDetailsByInviteToken = async (token, options = {}) => {
 
   if (enforceDeadline || validateTokenDeadlineAgainstGroupDeadline) {
     if (!group.deadLine) {
-      throw new ForbiddenException("errors.required_deadline");
+      throw new ConflictException("errors.required_deadline");
     }
 
     dlMs = new Date(group.deadLine).getTime();
 
     if (!Number.isFinite(dlMs)) {
-      throw new ForbiddenException("errors.required_deadline");
+      throw new ConflictException("errors.required_deadline");
     }
   }
 
@@ -739,7 +739,7 @@ exports.getGroupDetailsByInviteToken = async (token, options = {}) => {
 
   if (validateTokenDeadlineAgainstGroupDeadline) {
     if (decoded.exp && dlSec && decoded.exp > dlSec) {
-      throw new ForbiddenException("errors.invalid_or_expired_invite");
+      throw new ConflictException("errors.invalid_or_expired_invite");
     }
   }
 
