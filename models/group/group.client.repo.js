@@ -9,6 +9,7 @@ const {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
 } = require("../../middlewares/errorHandler/exceptions");
 
 const groupModel = require("./group.model");
@@ -604,13 +605,13 @@ exports.joinGroupByToken = async (clientId, token) => {
 
   // enforce DB deadLine too
   if (!group.deadLine) {
-    throw new ForbiddenException("errors.required_deadline");
+    throw new ConflictException("errors.required_deadline");
   }
 
   const dlMs = new Date(group.deadLine).getTime();
 
   if (!Number.isFinite(dlMs)) {
-    throw new ForbiddenException("errors.required_deadline");
+    throw new ConflictException("errors.required_deadline");
   }
 
   const dlSec = Math.floor(dlMs / 1000);
@@ -630,15 +631,15 @@ exports.joinGroupByToken = async (clientId, token) => {
   }
 
   if (group.isActive === false) {
-    throw new ForbiddenException("errors.group_inactive");
+    throw new ConflictException("errors.group_inactive");
   }
 
   if (group.status && String(group.status) !== "active") {
-    throw new ForbiddenException("errors.group_inactive");
+    throw new ConflictException("errors.group_inactive");
   }
 
   if (Date.now() > dlMs) {
-    throw new ForbiddenException("errors.group_deadline_passed");
+    throw new ConflictException("errors.group_deadline_passed");
   }
 
   const isCreator = String(group.creator) === String(clientId);
@@ -744,16 +745,16 @@ exports.getGroupDetailsByInviteToken = async (token, options = {}) => {
 
   if (!disabledStatusMessageKey && enforceActive) {
     if (group.isActive === false) {
-      throw new ForbiddenException("errors.group_inactive");
+      throw new ConflictException("errors.group_inactive");
     }
 
     if (group.status && String(group.status) !== "active") {
-      throw new ForbiddenException("errors.group_inactive");
+      throw new ConflictException("errors.group_inactive");
     }
   }
 
   if (!disabledStatusMessageKey && enforceDeadline && Date.now() > dlMs) {
-    throw new ForbiddenException("errors.group_deadline_passed");
+    throw new ConflictException("errors.group_deadline_passed");
   }
 
   const doc = await populateGroupQuery(groupModel.findById(groupId)).lean();
@@ -786,7 +787,7 @@ exports.getGroupDetailsByInviteToken = async (token, options = {}) => {
   }
 
   if (disabledStatusMessageKey) {
-    throw new BadRequestException(disabledStatusMessageKey);
+    throw new ConflictException(disabledStatusMessageKey);
   }
 
   return {
