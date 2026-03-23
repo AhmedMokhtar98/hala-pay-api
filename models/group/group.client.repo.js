@@ -535,9 +535,9 @@ exports.getGroupInviteLink = async (clientId, groupId) => {
 
   if (!group) throw new NotFoundException("errors.group_not_found");
 
-  if (group.isActive === false) throw new ForbiddenException("errors.group_inactive");
+  if (group.isActive === false) throw new ConflictException("errors.group_inactive");
   if (group.status && String(group.status) !== "active") {
-    throw new ForbiddenException("errors.group_inactive");
+    throw new ConflictException("errors.group_inactive");
   }
 
   // لازم يكون فيه deadline عشان exp يساويه
@@ -573,7 +573,7 @@ exports.joinGroupByToken = async (clientId, token) => {
   const groupId = decoded?.gid;
 
   if (!groupId) {
-    throw new ForbiddenException("errors.invalid_or_expired_invite");
+    throw new ConflictException("errors.invalid_or_expired_invite");
   }
 
   const group = await groupModel
@@ -617,7 +617,7 @@ exports.joinGroupByToken = async (clientId, token) => {
   const dlSec = Math.floor(dlMs / 1000);
 
   if (decoded.exp && dlSec && decoded.exp > dlSec) {
-    throw new ForbiddenException("errors.invalid_or_expired_invite");
+    throw new ConflictException("errors.invalid_or_expired_invite");
   }
 
   const doc = await populateGroupQuery(groupModel.findById(groupId)).lean();
