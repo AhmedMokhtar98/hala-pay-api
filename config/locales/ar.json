@@ -166,7 +166,7 @@
     "required_image": "ملف الصورة مطلوب",
     "requiredCreator": "المُنشئ مطلوب",
     "required_token": "الرمز مطلوب.",
-    "invalid_or_expired_invite": "رابط الدعوة غير صالح أو منتهي الصلاحية.",
+    "invalid_or_expired_invite": "رابط الدعوة غير صالح أو منتهي الصلاحية. أو انتهت مدة السماح للالتحاق بالمجموعة.",
     "group_inactive": "هذه المجموعة غير نشطة.",
     "required_deadline": "موعد انتهاء المجموعة مطلوب.",
     "group_deadline_passed": "انتهى موعد هذه المجموعة بالفعل.",

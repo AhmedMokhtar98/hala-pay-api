@@ -156,7 +156,7 @@
     "required_image": "Image file is required",
     "requiredCreator": "Creator is required",
     "required_token": "Token is required.",
-    "invalid_or_expired_invite": "Invalid or expired invite link.",
+    "invalid_or_expired_invite": "Invalid or expired invite link or group deadline passed.",
     "group_inactive": "This group is inactive.",
     "required_deadline": "Group deadline is required.",
     "group_deadline_passed": "This group deadline has already passed.",
