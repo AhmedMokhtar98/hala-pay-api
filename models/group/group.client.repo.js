@@ -4,6 +4,7 @@ const fs = require("fs");
 
 const applySearchFilter = require("../../helpers/applySearchFilter");
 const prepareQueryObjects = require("../../helpers/prepareQueryObjects");
+const clientModel = require("../client/client.model"); // <-- add this
 
 const {
   NotFoundException,
@@ -13,8 +14,6 @@ const {
 } = require("../../middlewares/errorHandler/exceptions");
 
 const groupModel = require("./group.model");
-const { default: mongoose } = require("mongoose");
-const paymentModel = require("../payment/payment.model");
 const productModel = require("../product/product.model"); // adjust if needed
 const { generateGroupInviteToken, verifyGroupInviteToken } = require("../../helpers/jwt.helper");
 const { normalizeAssetUrl, normalizeFields } = require("../../helpers/url.helper");
@@ -85,6 +84,43 @@ async function assertCreatorOrThrow(clientId, groupId) {
 
   throw new NotFoundException("errors.group_not_found");
 }
+function sanitizePhoneNumber(value = "") {
+  return String(value).replace(/[^\d]/g, "").trim();
+}
+
+function sanitizePhoneCode(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const digits = raw.replace(/[^\d]/g, "");
+  return digits ? `+${digits}` : "";
+}
+
+function sanitizeFullPhone(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const hasPlus = raw.startsWith("+");
+  const digits = raw.replace(/[^\d]/g, "");
+  if (!digits) return "";
+
+  return hasPlus ? `+${digits}` : digits;
+}
+
+function isPhoneLikeSearch(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+
+  return /^[+]?\d[\d\s\-()]{5,}$/.test(raw);
+}
+
+function appendAndCondition(baseFilter = {}, extraCondition = {}) {
+  if (!extraCondition || Object.keys(extraCondition).length === 0) return baseFilter;
+  if (!baseFilter || Object.keys(baseFilter).length === 0) return extraCondition;
+
+  return {
+    $and: [baseFilter, extraCondition],
+  };
+}
 
 /* ---------------------------
   Client Repo API (used by controllers/client/group.controller.js)
@@ -152,23 +188,150 @@ exports.createGroup = async (payload = {}) => {
  * listGroups (client)
  * - returns only groups where client is creator OR contributor
  */
+
+function sanitizePhoneNumber(value = "") {
+  return String(value).replace(/[^\d]/g, "").trim();
+}
+
+function sanitizePhoneCode(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const digits = raw.replace(/[^\d]/g, "");
+  return digits ? `+${digits}` : "";
+}
+
+function sanitizeFullPhone(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const hasPlus = raw.startsWith("+");
+  const digits = raw.replace(/[^\d]/g, "");
+  if (!digits) return "";
+  return hasPlus ? `+${digits}` : digits;
+}
+
+function appendAndCondition(baseFilter = {}, extraCondition = {}) {
+  if (!extraCondition || Object.keys(extraCondition).length === 0) return baseFilter;
+  if (!baseFilter || Object.keys(baseFilter).length === 0) return extraCondition;
+
+  return {
+    $and: [baseFilter, extraCondition],
+  };
+}
+
 exports.listGroups = async (clientId, filterObject = {}, selectionObject = {}, sortObject = {}) => {
   if (!clientId) throw new BadRequestException("errors.unauthorized");
+
+  const {
+    search,
+    phone,
+    phoneCode,
+    phoneNumber,
+    ...restFilterObject
+  } = filterObject || {};
+
+  const rawSearch = String(search || "").trim();
+  const searchLooksLikePhone = isPhoneLikeSearch(rawSearch);
+
+  // If search itself looks like a phone, don't send it to text regex search
+  const filterForPrepare = searchLooksLikePhone
+    ? { ...restFilterObject }
+    : { ...restFilterObject, search: rawSearch };
 
   const {
     filterObject: normalizedFilter,
     sortObject: normalizedSort,
     pageNumber,
     limitNumber,
-  } = prepareQueryObjects(filterObject, sortObject, {
-    sortableFields: ["createdAt", "name", "targetAmount", "collectedAmount", "deadLine", "status"],
+  } = prepareQueryObjects(filterForPrepare, sortObject, {
+    sortableFields: [
+      "createdAt",
+      "name",
+      "targetAmount",
+      "collectedAmount",
+      "deadLine",
+      "status",
+    ],
     defaultSort: "-createdAt",
   });
 
-  const finalFilter = applySearchFilter(
+  let finalFilter = applySearchFilter(
     { ...normalizedFilter, ...belongsFilter(clientId) },
     ["name", "description"]
   );
+
+  // explicit params OR phone-like search in ?search=
+  const normalizedPhoneNumber = sanitizePhoneNumber(
+    phoneNumber || (searchLooksLikePhone ? rawSearch : "")
+  );
+
+  const normalizedPhoneCode = sanitizePhoneCode(phoneCode);
+
+  const normalizedFullPhone = sanitizeFullPhone(
+    phone ||
+      (normalizedPhoneCode && normalizedPhoneNumber
+        ? `${normalizedPhoneCode}${normalizedPhoneNumber}`
+        : searchLooksLikePhone
+        ? rawSearch
+        : "")
+  );
+
+  // phone search: by phoneNumber OR phoneCode+phoneNumber OR full phone
+  if (normalizedPhoneNumber || normalizedFullPhone) {
+    const clientPhoneOrConditions = [];
+
+    if (normalizedPhoneNumber) {
+      clientPhoneOrConditions.push({
+        phoneNumber: normalizedPhoneNumber,
+      });
+    }
+
+    if (normalizedPhoneCode && normalizedPhoneNumber) {
+      clientPhoneOrConditions.push({
+        phoneCode: normalizedPhoneCode,
+        phoneNumber: normalizedPhoneNumber,
+      });
+    }
+
+    if (normalizedFullPhone) {
+      clientPhoneOrConditions.push({
+        $expr: {
+          $eq: [
+            { $concat: ["$phoneCode", "$phoneNumber"] },
+            normalizedFullPhone,
+          ],
+        },
+      });
+    }
+
+    const matchedClients = await clientModel
+      .find({ $or: clientPhoneOrConditions }, { _id: 1 })
+      .lean();
+
+    const matchedClientIds = matchedClients.map((item) => item._id);
+
+    if (!matchedClientIds.length) {
+      return {
+        success: true,
+        code: 200,
+        result: [],
+        count: 0,
+        page: pageNumber,
+        limit: limitNumber,
+      };
+    }
+
+    finalFilter = appendAndCondition(finalFilter, {
+      $or: [
+        { creator: { $in: matchedClientIds } },
+
+        // if contributors is array of ObjectId refs
+        { contributors: { $in: matchedClientIds } },
+
+        // if contributors is array of subdocs like { client, paidAmount, transactionStatus }
+        { "contributors.client": { $in: matchedClientIds } },
+      ],
+    });
+  }
 
   const ensureStoreSelected = (sel = {}) => {
     if (!sel || Object.keys(sel).length === 0) return sel;

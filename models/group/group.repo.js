@@ -14,6 +14,7 @@ const {
 
 const groupModel = require("./group.model");
 const productModel = require("../product/product.model"); // adjust if needed
+const clientModel = require("../client/client.model");
 const { createYallaPayOrder } = require("../../providers/salla/services/order.service");
 const { normalizeAssetUrl } = require("../../helpers/url.helper");
 const PUBLIC_DIR = path.join(process.cwd(), "public");
@@ -66,7 +67,105 @@ function populateGroupQuery(query) {
     .populate("creator", "firstName lastName phone email image")
     .populate("contributors.client", "firstName lastName phone email image");
 }
+function escapeRegex(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
+function sanitizePhoneDigits(value = "") {
+  return String(value).replace(/[^\d]/g, "").trim();
+}
+
+function sanitizePhoneCode(value = "") {
+  const digits = sanitizePhoneDigits(value);
+  return digits ? `+${digits}` : "";
+}
+
+function isPhoneLikeSearch(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  return /^[+]?\d[\d\s\-()]{5,}$/.test(raw);
+}
+
+function appendAndCondition(baseFilter = {}, extraCondition = {}) {
+  if (!extraCondition || Object.keys(extraCondition).length === 0) return baseFilter;
+  if (!baseFilter || Object.keys(baseFilter).length === 0) return extraCondition;
+
+  return {
+    $and: [baseFilter, extraCondition],
+  };
+}
+
+function buildPhoneCandidates({ search = "", phone = "", phoneCode = "", phoneNumber = "" }) {
+  const exactPhoneNumbers = new Set();
+  const fullPhones = new Set();
+
+  const addPhoneNumberVariants = (digits) => {
+    const clean = sanitizePhoneDigits(digits);
+    if (!clean) return;
+
+    exactPhoneNumbers.add(clean);
+
+    if (clean.startsWith("0") && clean.length > 1) {
+      exactPhoneNumbers.add(clean.slice(1));
+    }
+
+    if (clean.startsWith("20") && clean.length > 2) {
+      const local = clean.slice(2);
+      exactPhoneNumbers.add(local);
+
+      if (!local.startsWith("0")) {
+        exactPhoneNumbers.add(`0${local}`);
+      }
+    }
+  };
+
+  const addFullPhoneVariants = (rawValue) => {
+    const raw = String(rawValue || "").trim();
+    if (!raw) return;
+
+    const digits = sanitizePhoneDigits(raw);
+    if (!digits) return;
+
+    if (raw.startsWith("+")) {
+      fullPhones.add(`+${digits}`);
+    }
+
+    if (digits.startsWith("20")) {
+      fullPhones.add(`+${digits}`);
+    }
+  };
+
+  if (phoneNumber) {
+    addPhoneNumberVariants(phoneNumber);
+  }
+
+  if (phoneCode && phoneNumber) {
+    const code = sanitizePhoneCode(phoneCode);
+    const numberDigits = sanitizePhoneDigits(phoneNumber);
+    const local = numberDigits.startsWith("0")
+      ? numberDigits.slice(1)
+      : numberDigits;
+
+    if (code && local) {
+      fullPhones.add(`${code}${local}`);
+    }
+  }
+
+  if (phone) {
+    addPhoneNumberVariants(phone);
+    addFullPhoneVariants(phone);
+  }
+
+  if (search && isPhoneLikeSearch(search)) {
+    addPhoneNumberVariants(search);
+    addFullPhoneVariants(search);
+  }
+
+  return {
+    exactPhoneNumbers: [...exactPhoneNumbers].filter(Boolean),
+    fullPhones: [...fullPhones].filter(Boolean),
+  };
+}
 /* ---------------------------
   CRUD
 --------------------------- */
@@ -124,13 +223,24 @@ exports.createGroup = async (groupData = {}) => {
   return { success: true, code: 201, result: doc };
 };
 
-exports.listGroups = async (filterObject, selectionObject = {}, sortObject = {}) => {
+exports.listGroups = async (filterObject = {}, selectionObject = {}, sortObject = {}) => {
+  const {
+    search,
+    phone,
+    phoneCode,
+    phoneNumber,
+    ...restFilterObject
+  } = filterObject || {};
+
+  const rawSearch = String(search || "").trim();
+  const searchLooksLikePhone = isPhoneLikeSearch(rawSearch);
+
   const {
     filterObject: normalizedFilter,
     sortObject: normalizedSort,
     pageNumber,
     limitNumber,
-  } = prepareQueryObjects(filterObject, sortObject, {
+  } = prepareQueryObjects(restFilterObject, sortObject, {
     sortableFields: ["createdAt", "name", "targetAmount", "collectedAmount", "deadLine", "status"],
     defaultSort: "-createdAt",
   });
@@ -179,9 +289,75 @@ exports.listGroups = async (filterObject, selectionObject = {}, sortObject = {})
     };
   }
 
-  /* ---------------- search over: name, description ---------------- */
+  /* ---------------- search ---------------- */
 
-  const finalFilter = applySearchFilter(normalizedFilter, ["name", "description"]);
+  let finalFilter = { ...normalizedFilter };
+
+  if (rawSearch && !searchLooksLikePhone) {
+    const safeRegex = new RegExp(escapeRegex(rawSearch), "i");
+
+    finalFilter = appendAndCondition(finalFilter, {
+      $or: [
+        { name: safeRegex },
+        { description: safeRegex },
+      ],
+    });
+  }
+
+  /* ---------------- phone search: creator + contributors.client ---------------- */
+
+  const phoneCandidates = buildPhoneCandidates({
+    search,
+    phone,
+    phoneCode,
+    phoneNumber,
+  });
+
+  const hasPhoneSearch =
+    phoneCandidates.exactPhoneNumbers.length > 0 ||
+    phoneCandidates.fullPhones.length > 0;
+
+  if (hasPhoneSearch) {
+    const clientPhoneOrConditions = [];
+
+    if (phoneCandidates.exactPhoneNumbers.length) {
+      clientPhoneOrConditions.push({
+        phoneNumber: { $in: phoneCandidates.exactPhoneNumbers },
+      });
+    }
+
+    for (const fullPhone of phoneCandidates.fullPhones) {
+      clientPhoneOrConditions.push({
+        $expr: {
+          $eq: [{ $concat: ["$phoneCode", "$phoneNumber"] }, fullPhone],
+        },
+      });
+    }
+
+    const matchedClients = await clientModel
+      .find({ $or: clientPhoneOrConditions }, { _id: 1 })
+      .lean();
+
+    const matchedClientIds = matchedClients.map((item) => item._id);
+
+    if (!matchedClientIds.length) {
+      return {
+        success: true,
+        code: 200,
+        result: [],
+        count: 0,
+        page: pageNumber,
+        limit: limitNumber,
+      };
+    }
+
+    finalFilter = appendAndCondition(finalFilter, {
+      $or: [
+        { creator: { $in: matchedClientIds } },
+        { "contributors.client": { $in: matchedClientIds } },
+      ],
+    });
+  }
 
   /* ---------------- selection safety ---------------- */
 
@@ -191,7 +367,16 @@ exports.listGroups = async (filterObject, selectionObject = {}, sortObject = {})
     const values = Object.values(sel).map((v) => Number(v));
     const isIncludeMode = values.some((v) => v === 1);
 
-    if (isIncludeMode) return { ...sel, store: 1, product: 1, contributors: 1 };
+    if (isIncludeMode) {
+      return {
+        ...sel,
+        store: 1,
+        product: 1,
+        contributors: 1,
+        creator: 1,
+      };
+    }
+
     return sel;
   };
 
@@ -218,15 +403,15 @@ exports.listGroups = async (filterObject, selectionObject = {}, sortObject = {})
   const normalizeImagesArray = (arr) =>
     Array.isArray(arr) ? arr.map((img) => normalizeAssetUrl(img)) : arr;
 
-  const normalizeContributor = (contributor) => {
-    if (!contributor || typeof contributor !== "object") return contributor;
+  const normalizeParticipant = (item) => {
+    if (!item || typeof item !== "object") return item;
 
     return {
-      ...contributor,
-      image: normalizeAssetUrl(contributor.image),
-      avatar: normalizeAssetUrl(contributor.avatar),
-      logo: normalizeAssetUrl(contributor.logo),
-      images: normalizeImagesArray(contributor.images),
+      ...item,
+      image: normalizeAssetUrl(item.image),
+      avatar: normalizeAssetUrl(item.avatar),
+      logo: normalizeAssetUrl(item.logo),
+      images: normalizeImagesArray(item.images),
     };
   };
 
@@ -257,8 +442,15 @@ exports.listGroups = async (filterObject, selectionObject = {}, sortObject = {})
         }
       : group.product,
 
+    creator: group.creator ? normalizeParticipant(group.creator) : group.creator,
+
     contributors: Array.isArray(group.contributors)
-      ? group.contributors.map(normalizeContributor)
+      ? group.contributors.map((contributor) => ({
+          ...contributor,
+          client: contributor?.client
+            ? normalizeParticipant(contributor.client)
+            : contributor?.client,
+        }))
       : group.contributors,
   }));
 
