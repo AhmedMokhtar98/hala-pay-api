@@ -76,7 +76,7 @@ exports.createGroup = async (groupData = {}) => {
 
   const product = await resolveProductOrThrow(groupData.product);
 
-  const price = normNum(product.price, NaN);
+  const price = normNum(product.price.amount, NaN);
   if (!Number.isFinite(price) || price < 0) {
     throw new BadRequestException("errors.invalid_product_price");
   }

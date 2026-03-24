@@ -10,6 +10,7 @@ const categoriesRoutes = require("./category.route");
 const storesRoutes = require("./store.route");
 const productsRoutes = require("./product.route");
 const heroSlideRoutes = require("./heroAds.route");
+const paymentsRoutes = require("./payments.route");
 const groupRoutes = require("./group.route");
 const allowedUsers = ["superAdmin", "admin"]
 let { isAuthorized } = require("../../helpers/authorizer.helper")
@@ -25,5 +26,6 @@ app.use("/roles", checkToken(allowedUsers), isAuthorized, roles);
 app.use("/permissions", checkToken(allowedUsers), isAuthorized, permissionRoutes);
 app.use("/groups", checkToken(allowedUsers), isAuthorized, groupRoutes);
 app.use("/hero-ads", checkToken(allowedUsers), isAuthorized, heroSlideRoutes);
+app.use("/payments", checkToken(allowedUsers), isAuthorized, paymentsRoutes);
 
 module.exports = app

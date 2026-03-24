@@ -55,6 +55,33 @@ const categoriesEndPoints = new Set([
   "PUT /admin/categories/image",
 ]);
 
+const productsEndPoints = new Set([
+  "POST /admin/products",
+  "PUT /admin/products/:productId",
+  "GET /admin/products",
+  "GET /admin/products/:productId",
+  "DELETE /admin/products/:productId",
+  "PUT /admin/products/images",
+  "DELETE /admin/products/images/remove",
+  "DELETE /admin/products/images/clear",
+]);
+
+const groupEndPoints = new Set([
+  "POST /admin/groups",
+  "PUT /admin/groups/:_id",
+  "GET /admin/groups",
+  "GET /admin/groups/:_id",
+  "DELETE /admin/groups/:_id",
+  "PUT /admin/groups/image",
+  "DELETE /admin/groups/image/remove",
+]);
+
+const paymentsEndPoints = new Set([
+  "GET /admin/payments",
+  "GET /admin/payments/:_id",
+  "DELETE /admin/payments/:_id",
+]);
+
 // PERMISSIONS
 const permissionEndPoints = new Set([
   "GET /admin/permissions",
@@ -67,5 +94,7 @@ permissions.set("clients", clientEndPoints);
 permissions.set("permissions", permissionEndPoints);
 permissions.set("stores", storeEndPoints);
 permissions.set("categories", categoriesEndPoints);
-
+permissions.set("products", productsEndPoints);
+permissions.set("groups", groupEndPoints);
+permissions.set("payments", paymentsEndPoints);
 module.exports = { permissions };
