@@ -687,7 +687,7 @@ function buildJoinLink(token) {
 
 
 exports.getGroupInviteLink = async (clientId, groupId) => {
-  await assertCreatorOrThrow(clientId, groupId);
+  // await assertCreatorOrThrow(clientId, groupId);
 
   if (!groupId) throw new BadRequestException("errors.required_group_id");
 
